@@ -1,0 +1,39 @@
+{
+    "name": "MusicTrack",
+    "type": "object",
+    "properties": {
+      "ten_bai": {
+        "type": "string",
+        "description": "Track/song title"
+      },
+      "nghe_si": {
+        "type": "string",
+        "description": "Artist name"
+      },
+      "loai": {
+        "type": "string",
+        "enum": [
+          "link",
+          "upload"
+        ],
+        "description": "Link or uploaded file"
+      },
+      "url": {
+        "type": "string",
+        "description": "YouTube/SoundCloud link or uploaded file URL"
+      },
+      "anh_bia": {
+        "type": "string",
+        "description": "Cover image URL"
+      },
+      "ghi_chu": {
+        "type": "string",
+        "description": "Note / vibe description"
+      }
+    },
+    "required": [
+      "ten_bai",
+      "loai",
+      "url"
+    ]
+  }

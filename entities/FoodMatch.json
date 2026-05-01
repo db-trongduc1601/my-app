@@ -1,0 +1,87 @@
+{
+    "name": "FoodMatch",
+    "type": "object",
+    "properties": {
+      "ten_mon": {
+        "type": "string",
+        "description": "Dish name"
+      },
+      "anh": {
+        "type": "string",
+        "description": "Photo URL"
+      },
+      "nhiet_do": {
+        "type": "string",
+        "enum": [
+          "N\u00f3ng h\u1ed5i",
+          "L\u1ea1nh m\u00e1t"
+        ],
+        "description": "Hot or cold"
+      },
+      "loai_no": {
+        "type": "string",
+        "enum": [
+          "\u0102n no n\u00ea",
+          "\u0102n v\u1eb7t s\u01b0\u01a1ng s\u01b0\u01a1ng"
+        ],
+        "description": "Full meal or snack"
+      },
+      "kieu_an": {
+        "type": "string",
+        "enum": [
+          "N\u01b0\u1edbc",
+          "Kh\u00f4",
+          "Cu\u1ed1n",
+          "N\u01b0\u1edbng-Chi\u00ean"
+        ],
+        "description": "Soup, Dry, Roll, Grilled/Fried"
+      },
+      "quoc_tich": {
+        "type": "string",
+        "enum": [
+          "Vi\u1ec7t",
+          "H\u00e0n",
+          "Nh\u1eadt",
+          "\u00c2u",
+          "Kh\u00e1c"
+        ],
+        "description": "Cuisine origin"
+      },
+      "khoang_cach": {
+        "type": "string",
+        "enum": [
+          "G\u1ea7n nh\u00e0",
+          "\u0110i xa"
+        ],
+        "description": "Distance: near (<2km) or far (>2km)"
+      },
+      "ngan_sach": {
+        "type": "string",
+        "enum": [
+          "B\u00ecnh d\u00e2n",
+          "Sang ch\u1ea3nh"
+        ],
+        "description": "Budget: affordable or fancy"
+      },
+      "dia_chi": {
+        "type": "string",
+        "description": "Restaurant address"
+      },
+      "gia_uoc_tinh": {
+        "type": "string",
+        "description": "Estimated price range"
+      },
+      "gio_mo_cua": {
+        "type": "string",
+        "description": "Opening hours"
+      },
+      "chot_don": {
+        "type": "boolean",
+        "default": false,
+        "description": "Confirmed order"
+      }
+    },
+    "required": [
+      "ten_mon"
+    ]
+  }

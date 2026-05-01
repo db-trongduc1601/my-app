@@ -1,0 +1,23 @@
+{
+    "name": "QuestBoard",
+    "type": "object",
+    "properties": {
+      "ten_nhiem_vu": {
+        "type": "string",
+        "description": "Quest name"
+      },
+      "diem_exp": {
+        "type": "number",
+        "description": "EXP points reward"
+      },
+      "da_xong": {
+        "type": "boolean",
+        "default": false,
+        "description": "Completed"
+      }
+    },
+    "required": [
+      "ten_nhiem_vu",
+      "diem_exp"
+    ]
+  }

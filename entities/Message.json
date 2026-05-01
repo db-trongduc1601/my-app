@@ -1,0 +1,23 @@
+{
+    "name": "Message",
+    "type": "object",
+    "properties": {
+      "sender_email": {
+        "type": "string",
+        "description": "Email of the sender"
+      },
+      "receiver_email": {
+        "type": "string",
+        "description": "Email of the receiver"
+      },
+      "content": {
+        "type": "string",
+        "description": "Message text"
+      }
+    },
+    "required": [
+      "sender_email",
+      "receiver_email",
+      "content"
+    ]
+  }

@@ -1,0 +1,37 @@
+{
+    "name": "Reminders",
+    "type": "object",
+    "properties": {
+      "ten_nhac_nho": {
+        "type": "string",
+        "description": "Reminder name (e.g. U\u1ed1ng n\u01b0\u1edbc, H\u1ecdc b\u00e0i)"
+      },
+      "gio_nhac": {
+        "type": "string",
+        "description": "Reminder time (HH:MM)"
+      },
+      "kich_hoat": {
+        "type": "boolean",
+        "default": true,
+        "description": "Active/Inactive toggle"
+      }
+    },
+    "required": [
+      "ten_nhac_nho",
+      "gio_nhac"
+    ],
+    "rls": {
+      "create": {
+        "created_by": "{{user.email}}"
+      },
+      "read": {
+        "created_by": "{{user.email}}"
+      },
+      "update": {
+        "created_by": "{{user.email}}"
+      },
+      "delete": {
+        "created_by": "{{user.email}}"
+      }
+    }
+  }

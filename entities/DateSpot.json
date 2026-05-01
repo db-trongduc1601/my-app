@@ -1,0 +1,56 @@
+{
+    "name": "DateSpot",
+    "type": "object",
+    "properties": {
+      "ten_dia_diem": {
+        "type": "string",
+        "description": "Place name"
+      },
+      "anh": {
+        "type": "string",
+        "description": "Photo URL"
+      },
+      "khong_gian": {
+        "type": "string",
+        "enum": [
+          "Trong nh\u00e0",
+          "Ngo\u00e0i tr\u1eddi"
+        ],
+        "description": "Indoor or outdoor"
+      },
+      "nang_luong": {
+        "type": "string",
+        "enum": [
+          "Chilling",
+          "Ho\u1ea1t \u0111\u1ed9ng"
+        ],
+        "description": "Chill or active"
+      },
+      "thoi_diem": {
+        "type": "string",
+        "enum": [
+          "S\u00e1ng",
+          "T\u1ed1i"
+        ],
+        "description": "Morning or evening"
+      },
+      "dia_chi": {
+        "type": "string",
+        "description": "Address"
+      },
+      "gia_ve": {
+        "type": "string",
+        "description": "Ticket/entry price"
+      },
+      "gio_hoat_dong": {
+        "type": "string",
+        "description": "Operating hours"
+      }
+    },
+    "required": [
+      "ten_dia_diem",
+      "khong_gian",
+      "nang_luong",
+      "thoi_diem"
+    ]
+  }

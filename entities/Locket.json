@@ -1,0 +1,32 @@
+{
+    "name": "Locket",
+    "type": "object",
+    "properties": {
+      "anh_url": {
+        "type": "string",
+        "description": "URL of the media file"
+      },
+      "loi_nhan": {
+        "type": "string",
+        "description": "Message attached to the media"
+      },
+      "nguoi_tai_len": {
+        "type": "string",
+        "description": "Who uploaded"
+      },
+      "media_type": {
+        "type": "string",
+        "enum": [
+          "photo",
+          "audio",
+          "video"
+        ],
+        "default": "photo",
+        "description": "Type of media: photo, audio, or video"
+      }
+    },
+    "required": [
+      "anh_url",
+      "nguoi_tai_len"
+    ]
+  }

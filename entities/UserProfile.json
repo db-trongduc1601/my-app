@@ -1,0 +1,18 @@
+{
+    "name": "UserProfile",
+    "type": "object",
+    "properties": {
+      "email": {
+        "type": "string",
+        "description": "User email"
+      },
+      "friend_code": {
+        "type": "string",
+        "description": "Unique 6-char friend code (XXXNNN)"
+      }
+    },
+    "required": [
+      "email",
+      "friend_code"
+    ]
+  }

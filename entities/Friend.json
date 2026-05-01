@@ -1,0 +1,40 @@
+{
+    "name": "Friend",
+    "type": "object",
+    "properties": {
+      "owner_email": {
+        "type": "string",
+        "description": "Email of the user who added this friend"
+      },
+      "friend_email": {
+        "type": "string",
+        "description": "Email of the friend"
+      },
+      "friend_code": {
+        "type": "string",
+        "description": "Friend code of the friend"
+      },
+      "nickname": {
+        "type": "string",
+        "description": "Custom nickname for this friend"
+      },
+      "status": {
+        "type": "string",
+        "enum": [
+          "pending",
+          "accepted"
+        ],
+        "default": "pending",
+        "description": "Friendship status: pending = waiting for acceptance, accepted = friends"
+      },
+      "requester_email": {
+        "type": "string",
+        "description": "Email of who sent the friend request"
+      }
+    },
+    "required": [
+      "owner_email",
+      "friend_email",
+      "friend_code"
+    ]
+  }

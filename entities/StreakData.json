@@ -1,0 +1,23 @@
+{
+    "name": "StreakData",
+    "type": "object",
+    "properties": {
+      "user_email": {
+        "type": "string",
+        "description": "User email"
+      },
+      "streak_count": {
+        "type": "number",
+        "default": 0,
+        "description": "Current streak count in days"
+      },
+      "last_claimed_date": {
+        "type": "string",
+        "description": "ISO date string of last streak claim (YYYY-MM-DD)"
+      }
+    },
+    "required": [
+      "user_email",
+      "streak_count"
+    ]
+  }
