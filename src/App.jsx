@@ -12,6 +12,10 @@ import Food from '@/pages/Food';
 import Vault from '@/pages/Vault';
 import Quests from '@/pages/Quests';
 import Entertainment from '@/pages/Entertainment';
+import { useState, useEffect } from 'react';
+import { auth } from './firebase';
+import { onAuthStateChanged } from 'firebase/auth';
+import Login from './pages/Login';
 
 const AuthenticatedApp = () => {
   const { isLoadingAuth, isLoadingPublicSettings, authError, navigateToLogin } = useAuth();
@@ -44,6 +48,30 @@ const AuthenticatedApp = () => {
 };
 
 function App() {
+  const [user, setUser] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+      setUser(currentUser);
+      setLoading(false);
+    });
+    
+    return () => unsubscribe();
+  }, []);
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-[#FFF0F5]">
+        <div className="text-pink-400 font-medium">Đang tải không gian...</div>
+      </div>
+    );
+  }
+
+  if (!user) {
+    return <Login />;
+  }
+
   return (
     <ThemeProvider>
       <AuthProvider>
