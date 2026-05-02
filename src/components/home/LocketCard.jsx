@@ -1,6 +1,5 @@
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { Camera, Heart, Loader2, X, Send, Trash2, Maximize2, Download, Mic, MicOff, Video, Play, Pause } from 'lucide-react';
-import { base44 } from '@/api/base44Client';
 import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -9,7 +8,12 @@ import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { timeAgo } from '@/lib/timeAgo';
 import { cn } from '@/lib/utils';
 
-/* ─── Audio Visualizer ─────────────────────────────────── */
+// 🔥 CÁC CÔNG CỤ FIREBASE MỚI
+import { db, storage } from '../../firebase';
+import { collection, addDoc, doc, deleteDoc, serverTimestamp } from 'firebase/firestore';
+import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
+
+/* ─── Audio Visualizer (Giữ nguyên 100%) ─────────────────────────────────── */
 function AudioVisualizer({ src, playing, onToggle }) {
   const audioRef = useRef();
   const canvasRef = useRef();
@@ -85,7 +89,7 @@ function AudioVisualizer({ src, playing, onToggle }) {
   );
 }
 
-/* ─── Memory Thumbnail ──────────────────────────────────── */
+/* ─── Memory Thumbnail (Đã tích hợp Xóa Firebase) ──────────────────────────────────── */
 function MemoryThumb({ photo, onDeleted }) {
   const [fullscreen, setFullscreen] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -94,9 +98,20 @@ function MemoryThumb({ photo, onDeleted }) {
   const handleDelete = async (e) => {
     e.stopPropagation();
     setDeleting(true);
-    await base44.entities.Locket.delete(photo.id);
-    toast.success('Đã xóa');
-    onDeleted?.();
+    try {
+      // 1. Xóa file vật lý trên Ổ cứng Storage (nếu có)
+      if (photo.anh_url.includes('firebasestorage')) {
+        const fileRef = ref(storage, photo.anh_url);
+        await deleteObject(fileRef).catch(() => {}); // Kệ lỗi nếu file không tồn tại
+      }
+      // 2. Xóa dữ liệu trong Firestore
+      await deleteDoc(doc(db, 'locket_photos', photo.id));
+      
+      toast.success('Đã xóa');
+      onDeleted?.();
+    } catch (error) {
+      toast.error('Lỗi khi xóa!');
+    }
     setDeleting(false);
   };
 
@@ -166,7 +181,7 @@ function MemoryThumb({ photo, onDeleted }) {
   );
 }
 
-/* ─── Main LocketCard ───────────────────────────────────── */
+/* ─── Main LocketCard (Đã tích hợp Upload Firebase) ───────────────────────────────────── */
 const MEDIA_TABS = [
   { key: 'photo', emoji: '📷', label: 'Ảnh' },
   { key: 'audio', emoji: '🎙️', label: 'Voice' },
@@ -184,16 +199,9 @@ export default function LocketCard({ latestPhoto, allPhotos = [], onUploaded, on
   const [fullscreen, setFullscreen] = useState(false);
   const [audioPlaying, setAudioPlaying] = useState(false);
   const [recording, setRecording] = useState(false);
-  const [tick, setTick] = useState(0);
   const fileRef = useRef();
-  const videoRef = useRef();
   const recorderRef = useRef();
   const chunksRef = useRef([]);
-
-  useEffect(() => {
-    const t = setInterval(() => setTick((v) => v + 1), 1000);
-    return () => clearInterval(t);
-  }, []);
 
   const isVideo = latestPhoto?.media_type === 'video';
   const isAudio = latestPhoto?.media_type === 'audio';
@@ -202,29 +210,29 @@ export default function LocketCard({ latestPhoto, allPhotos = [], onUploaded, on
     const f = e.target.files[0];
     if (!f) return;
     setFile(f);
-    if (mediaTab === 'audio') {
-      setPreview(URL.createObjectURL(f));
-    } else {
-      setPreview(URL.createObjectURL(f));
-    }
+    setPreview(URL.createObjectURL(f));
   };
 
   const startRecording = async () => {
     if (mediaTab === 'audio') {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const rec = new MediaRecorder(stream);
-      chunksRef.current = [];
-      rec.ondataavailable = e => chunksRef.current.push(e.data);
-      rec.onstop = () => {
-        const blob = new Blob(chunksRef.current, { type: 'audio/webm' });
-        const f = new File([blob], 'voice.webm', { type: 'audio/webm' });
-        setFile(f);
-        setPreview(URL.createObjectURL(blob));
-        stream.getTracks().forEach(t => t.stop());
-      };
-      recorderRef.current = rec;
-      rec.start();
-      setRecording(true);
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        const rec = new MediaRecorder(stream);
+        chunksRef.current = [];
+        rec.ondataavailable = e => chunksRef.current.push(e.data);
+        rec.onstop = () => {
+          const blob = new Blob(chunksRef.current, { type: 'audio/webm' });
+          const f = new File([blob], 'voice.webm', { type: 'audio/webm' });
+          setFile(f);
+          setPreview(URL.createObjectURL(blob));
+          stream.getTracks().forEach(t => t.stop());
+        };
+        recorderRef.current = rec;
+        rec.start();
+        setRecording(true);
+      } catch (err) {
+        toast.error("Không thể bật Micro!");
+      }
     }
   };
 
@@ -236,29 +244,51 @@ export default function LocketCard({ latestPhoto, allPhotos = [], onUploaded, on
   const handleUpload = async () => {
     if (!file) return;
     setUploading(true);
-    const { file_url } = await base44.integrations.Core.UploadFile({ file });
-    await base44.entities.Locket.create({
-      anh_url: file_url,
-      loi_nhan: message,
-      nguoi_tai_len: currentUser?.full_name || 'Me',
-      media_type: mediaTab,
-    });
-    toast.success('💕 Đã gửi locket mới!');
-    setShowForm(false);
-    setFile(null);
-    setPreview(null);
-    setMessage('');
-    setUploading(false);
-    onUploaded?.();
+    try {
+      // 1. Tạo tên file độc nhất và Đẩy lên Storage
+      const fileExt = file.name ? file.name.split('.').pop() : 'webm';
+      const fileName = `locket_photos/${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExt}`;
+      const storageRef = ref(storage, fileName);
+      
+      await uploadBytes(storageRef, file);
+      const downloadURL = await getDownloadURL(storageRef);
+
+      // 2. Lưu thông tin hiển thị vào Firestore
+      await addDoc(collection(db, 'locket_photos'), {
+        anh_url: downloadURL,
+        loi_nhan: message,
+        nguoi_tai_len: currentUser?.displayName?.split(' ')[0] || 'Me',
+        media_type: mediaTab,
+        created_date: new Date().toISOString(),
+        createdAt: serverTimestamp() // Dùng để sắp xếp real-time
+      });
+
+      toast.success('💕 Đã gửi locket mới!');
+      closeForm();
+    } catch (error) {
+      console.error(error);
+      toast.error('Lỗi tải lên, thử lại nhé!');
+    } finally {
+      setUploading(false);
+      onUploaded?.();
+    }
   };
 
   const handleDelete = async () => {
     if (!latestPhoto) return;
     setDeleting(true);
-    await base44.entities.Locket.delete(latestPhoto.id);
-    toast.success('Đã xóa');
+    try {
+      if (latestPhoto.anh_url.includes('firebasestorage')) {
+        const fileRef = ref(storage, latestPhoto.anh_url);
+        await deleteObject(fileRef).catch(() => {});
+      }
+      await deleteDoc(doc(db, 'locket_photos', latestPhoto.id));
+      toast.success('Đã xóa');
+      onDeleted?.();
+    } catch (error) {
+      toast.error('Lỗi khi xóa!');
+    }
     setDeleting(false);
-    onDeleted?.();
   };
 
   const memories = allPhotos.slice(1);

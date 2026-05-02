@@ -1,29 +1,49 @@
 import { useEffect, useState } from 'react';
-import { base44 } from '@/api/base44Client';
-import { useQuery } from '@tanstack/react-query';
+import { auth, db } from '../firebase'; // Nhập công cụ của chúng ta
+import { collection, query, orderBy, limit, onSnapshot } from 'firebase/firestore';
 import LocketCard from '@/components/home/LocketCard';
 import DualClock from '@/components/home/DualClock';
 import { Heart } from 'lucide-react';
 
 export default function Home() {
-  const [user, setUser] = useState(null);
+  // Lấy luôn thông tin user từ Firebase (vì qua cửa mới vào được đây)
+  const currentUser = auth.currentUser;
+  
+  // Nơi chứa danh sách ảnh
+  const [photos, setPhotos] = useState([]);
 
+  // Kéo đường ống Real-time từ Firestore
   useEffect(() => {
-    base44.auth.me().then(setUser).catch(() => {});
+    // Chỉ định vào đúng "ngăn tủ" tên là locket_photos, lấy 20 tấm mới nhất
+    const q = query(
+      collection(db, 'locket_photos'), 
+      orderBy('createdAt', 'desc'), 
+      limit(20)
+    );
+
+    // Mở đường ống lắng nghe: Có ảnh mới là tự cập nhật ngay
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const photosData = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      }));
+      setPhotos(photosData);
+    });
+
+    // Rút ống khi chuyển sang trang khác cho nhẹ máy
+    return () => unsubscribe();
   }, []);
 
-  const { data: photos = [], refetch } = useQuery({
-    queryKey: ['locket'],
-    queryFn: () => base44.entities.Locket.list('-created_date', 20)
-  });
+  // Thay vì refetch, Firebase tự lo liệu rồi nên truyền hàm rỗng cho nó khỏi báo lỗi
+  const handleDummyRefetch = () => {};
 
   return (
     <div className="px-4 pt-2 pb-4 space-y-5">
-      {/* Header */}
+      {/* Header (Giữ nguyên 100%) */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="font-display text-2xl font-semibold text-foreground leading-tight">Đức & Quỳnh 💕
-
+          <h1 className="font-display text-2xl font-semibold text-foreground leading-tight">
+            Đức & Quỳnh 💕
           </h1>
           <p className="text-xs text-muted-foreground mt-0.5">không gian riêng của mình</p>
         </div>
@@ -32,17 +52,17 @@ export default function Home() {
         </div>
       </div>
 
-      {/* Locket — passes all photos so it can render memories */}
+      {/* Locket — truyền dữ liệu thật từ Firebase vào */}
       <LocketCard
         latestPhoto={photos[0] || null}
         allPhotos={photos}
-        onUploaded={refetch}
-        onDeleted={refetch}
-        currentUser={user} />
-      
+        onUploaded={handleDummyRefetch}
+        onDeleted={handleDummyRefetch}
+        currentUser={currentUser} 
+      />
 
-      {/* Dual Clock */}
+      {/* Dual Clock (Giữ nguyên) */}
       <DualClock />
-    </div>);
-
+    </div>
+  );
 }
