@@ -1,7 +1,6 @@
 import { initializeApp } from "firebase/app";
 import { getAuth } from "firebase/auth";
-import { initializeApp } from "firebase/app";
-import { getFirestore } from "firebase/firestore"; 
+import { getFirestore } from "firebase/firestore";
 import { getStorage } from "firebase/storage";
 
 const firebaseConfig = {
@@ -14,8 +13,10 @@ const firebaseConfig = {
   measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID
 };
 
+// Khởi tạo Firebase
 const app = initializeApp(firebaseConfig);
 
+// Xuất các công cụ ra để dùng
 export const auth = getAuth(app);
-export const db = getFirestore(app); // <-- Thêm dòng này
+export const db = getFirestore(app);
 export const storage = getStorage(app);
