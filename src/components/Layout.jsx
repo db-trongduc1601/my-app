@@ -1,11 +1,12 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { Outlet, useLocation, Link } from 'react-router-dom';
 import { Home, Utensils, Heart, Star, Music, MessageCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import TopBar from '@/components/TopBar';
 import GlobalChat from '@/components/GlobalChat';
-import { base44 } from '@/api/base44Client';
 import { AnimatePresence } from 'framer-motion';
+import { auth } from '../firebase';
+import { signOut } from 'firebase/auth';
 
 const tabs = [
   { path: '/', icon: Home, label: 'Trang chủ' },
@@ -18,11 +19,8 @@ const tabs = [
 export default function Layout() {
   const location = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [currentUser, setCurrentUser] = useState(null);
 
-  useEffect(() => {
-    base44.auth.me().then(setCurrentUser).catch(() => {});
-  }, []);
+  // Đã xóa hàm useEffect gọi base44 cũ đi để tiệt nọc lỗi 404!
 
   return (
     <div className="min-h-screen bg-background flex flex-col max-w-md mx-auto relative">
@@ -43,6 +41,26 @@ export default function Layout() {
         >
           <MessageCircle size={15} className="text-muted-foreground" />
         </button>
+
+        {/* --- KHU VỰC AVATAR & ĐĂNG XUẤT MỚI --- */}
+        <div className="flex items-center gap-2 ml-auto mr-3 bg-white/50 backdrop-blur-sm px-3 py-1.5 rounded-full shadow-sm border border-pink-100">
+          <img 
+            src={auth.currentUser?.photoURL || "https://via.placeholder.com/40"} 
+            alt="Avatar" 
+            className="w-7 h-7 rounded-full border border-pink-300"
+          />
+          <span className="font-medium text-gray-700 text-sm">
+            {auth.currentUser?.displayName?.split(' ')[0] || "Bạn yêu"}
+          </span>
+          <button 
+            onClick={() => signOut(auth)}
+            className="ml-1 px-2 py-0.5 bg-red-50 text-red-500 rounded-full text-xs font-semibold hover:bg-red-100 transition-colors"
+          >
+            Thoát
+          </button>
+        </div>
+
+        {/* Giữ lại TopBar vì có thể nó đang chứa icon Mặt trăng (Dark mode) */}
         <TopBar />
       </div>
 
@@ -84,7 +102,7 @@ export default function Layout() {
           <GlobalChat
             open={sidebarOpen}
             onClose={() => setSidebarOpen(false)}
-            currentUser={currentUser}
+            currentUser={auth.currentUser} 
           />
         )}
       </AnimatePresence>
