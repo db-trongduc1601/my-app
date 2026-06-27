@@ -153,14 +153,17 @@ export default function ChatWindow({ friend, currentUser, onBack }) {
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
-      <div className="flex items-center gap-3 px-4 py-3 border-b border-border flex-shrink-0">
+      <div className="flex items-center gap-3 px-4 py-3 liquid-glass rim-light flex-shrink-0">
         <button onClick={onBack} className="p-1 rounded-full hover:bg-secondary transition-colors">
           <ArrowLeft size={16} />
         </button>
         <div className="w-8 h-8 rounded-full gradient-primary flex items-center justify-center text-white text-sm font-bold">
           {displayName[0]?.toUpperCase()}
         </div>
-        <span className="font-semibold text-sm">{displayName}</span>
+        <div>
+          <p className="font-semibold text-sm">{displayName}</p>
+          <p className="text-[11px] text-muted-foreground">Chat riêng tư</p>
+        </div>
       </div>
 
       {/* Messages */}

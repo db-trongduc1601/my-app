@@ -161,9 +161,9 @@ export default function GlobalChat({ open, onClose, currentUser }) {
     <>
       <div className="absolute inset-0 z-40 bg-black/30 backdrop-blur-[4px]" onClick={onClose} />
       <motion.div
-        initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }}
+        initial={{ x: '-100%' }} animate={{ x: 0 }} exit={{ x: '-100%' }}
         transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-        className="absolute top-16 bottom-0 left-0 right-0 w-full z-50 liquid-glass-heavy rounded-t-3xl border-t border-white/10 shadow-2xl flex flex-col overflow-hidden"
+        className="absolute top-0 bottom-0 left-0 w-80 max-w-[85%] z-50 liquid-glass-heavy border-r border-border shadow-2xl flex flex-col overflow-hidden"
       >
         {/* Header */}
         <div className="flex items-center gap-3 px-4 py-3.5 liquid-glass rim-light flex-shrink-0 rounded-none">
