@@ -231,6 +231,7 @@ export default function ChatWindow({ friend, currentUser, onBack }) {
               onScrollToReplied={handleScrollToMessage}
               showAvatar={showAvatar}
               senderName={!isMe ? displayName : undefined}
+              avatarUrl={!isMe ? friendPresence?.photo_url : undefined}
             />
           );
         })}

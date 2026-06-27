@@ -244,6 +244,7 @@ export default function MusicTab({ tracks, onRefresh }) {
   
   // Listen Together states
   const [friends, setFriends] = useState([]);
+  const [profiles, setProfiles] = useState({}); // To store display names
   const [showInviteModal, setShowInviteModal] = useState(false);
   const [activeSession, setActiveSession] = useState(null); // Host or Guest session details
   const [incomingInvite, setIncomingInvite] = useState(null);
@@ -270,9 +271,18 @@ export default function MusicTab({ tracks, onRefresh }) {
       setFriends([...new Set(frs)]);
     };
     loadFriends();
+
+    const unsubProfiles = onSnapshot(collection(db, 'user_profiles'), (snap) => {
+      const profs = {};
+      snap.forEach(doc => {
+        profs[doc.data().email] = doc.data().display_name || doc.data().email.split('@')[0];
+      });
+      setProfiles(profs);
+    });
+    return () => unsubProfiles();
   }, [currentUser]);
 
-  // Lắng nghe incoming invites (Guest Flow)
+  // Lắng nghe incoming invites (Guest Flow) và trạng thái Host
   useEffect(() => {
     if (!currentUser) return;
     const q = query(
@@ -281,38 +291,51 @@ export default function MusicTab({ tracks, onRefresh }) {
     );
     const unsub = onSnapshot(q, (snapshot) => {
       let invite = null;
-      let active = null;
+      let activeGuest = null;
+      let activeHost = null;
+
       snapshot.docs.forEach(doc => {
         const data = doc.data();
-        // Bỏ qua session do mình tạo
-        if (data.host_email === currentUser.email) return;
-
-        if (data.status === 'inviting') {
-          invite = { id: doc.id, ...data };
-        } else if (data.status === 'active') {
-          active = { id: doc.id, ...data };
+        if (data.host_email === currentUser.email) {
+          // Là Host
+          if (data.status === 'inviting' || data.status === 'active') {
+            activeHost = { role: 'host', id: doc.id, participant: data.participant_email, ...data };
+          }
+        } else {
+          // Là Guest
+          if (data.status === 'inviting') {
+            invite = { id: doc.id, ...data };
+          } else if (data.status === 'active') {
+            activeGuest = { role: 'guest', id: doc.id, ...data };
+          }
         }
       });
 
-      if (active) {
-        // Đang là guest trong 1 session
-        setIncomingInvite(null);
-        setActiveSession({ role: 'guest', ...active });
-        // Đồng bộ nhạc theo active session
-        const track = tracks.find(t => t.id === active.track_id) || active.track;
-        if (track && nowPlaying?.id !== track.id) {
+      setIncomingInvite(invite);
+
+      // Cập nhật session Host/Guest
+      if (activeGuest) {
+        setActiveSession(activeGuest);
+        const track = tracks.find(t => t.id === activeGuest.track_id) || activeGuest.track;
+        if (track && prevTrackId.current !== track.id) {
           handleSelectTrack(track, true); // true = isGuest
         }
-        setIsPlaying(active.is_playing);
-      } else if (invite) {
-        setIncomingInvite(invite);
+        setIsPlaying(activeGuest.is_playing);
+      } else if (activeHost) {
+        setActiveSession(activeHost);
       } else {
-        setIncomingInvite(null);
-        if (activeSession?.role === 'guest') {
-          setActiveSession(null);
-          setIsPlaying(false);
-          toast.info("Đã kết thúc phiên nghe chung.");
-        }
+        // Cả Guest và Host đều kết thúc (hoặc Guest từ chối / rời phòng)
+        setActiveSession((prev) => {
+          if (prev?.role === 'guest') {
+            setIsPlaying(false);
+            if (audioRef.current) audioRef.current.pause();
+            try { iframeRef.current?.contentWindow?.postMessage(JSON.stringify({ event: 'command', func: 'pauseVideo', args: [] }), '*'); } catch (e) {}
+            toast.info("Đã kết thúc phiên nghe chung.");
+          } else if (prev?.role === 'host') {
+            toast.info("Người nghe chung đã rời phòng.");
+          }
+          return null;
+        });
       }
     });
     return () => unsub();
@@ -571,6 +594,12 @@ export default function MusicTab({ tracks, onRefresh }) {
       try {
         await setDoc(doc(db, 'listening_sessions', activeSession.id), { status: 'ended' }, { merge: true });
         setActiveSession(null);
+        setIsPlaying(false);
+        if (nowPlaying?.loai === 'link') {
+          sendYouTubeCommand('pauseVideo');
+        } else if (audioRef.current) {
+          audioRef.current.pause();
+        }
         toast.info("Đã thoát chế độ nghe chung.");
       } catch (e) {}
     }
@@ -685,7 +714,7 @@ export default function MusicTab({ tracks, onRefresh }) {
           <div className="mx-2 mb-2 px-3 py-2 liquid-glass-sm rounded-xl flex items-center justify-between border border-primary/20 bg-primary/5">
             <div className="flex items-center gap-2">
               <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
-              <p className="text-xs font-medium">Đang phát cho: <span className="text-primary">{activeSession.participant.split('@')[0]}</span></p>
+              <p className="text-xs font-medium">Đang phát cho: <span className="text-primary">{profiles[activeSession.participant] || activeSession.participant.split('@')[0]}</span></p>
             </div>
             <button onClick={handleStopSession} className="text-[10px] uppercase font-bold text-destructive px-2 py-1 bg-destructive/10 rounded-lg hover:bg-destructive/20">Dừng</button>
           </div>
@@ -876,7 +905,7 @@ export default function MusicTab({ tracks, onRefresh }) {
             ) : (
               friends.map(email => (
                 <div key={email} className="flex items-center justify-between p-3 rounded-xl bg-white/5 hover:bg-white/10 transition-colors">
-                  <p className="text-sm font-medium truncate flex-1">{email.split('@')[0]}</p>
+                  <p className="text-sm font-medium truncate flex-1">{profiles[email] || email.split('@')[0]}</p>
                   <Button size="sm" onClick={() => handleInviteFriend(email)} className="h-8 rounded-lg gradient-primary text-xs">Mời</Button>
                 </div>
               ))

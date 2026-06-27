@@ -9,7 +9,8 @@ const MessageBubbleComponent = ({
   message, 
   isMe, 
   senderName, 
-  showAvatar, 
+  showAvatar,
+  avatarUrl,
   avatarColor,
   onReply,
   onUnsend,
@@ -32,11 +33,15 @@ const MessageBubbleComponent = ({
     <div id={`msg-${message.id}`} className={cn('flex gap-2 items-end w-full group', isMe ? 'justify-end' : 'justify-start', isFirst ? 'mt-3' : 'mt-[2px]')}>
       {/* Avatar for others */}
       {!isMe && showAvatar !== undefined && (
-        <div className={cn('w-7 h-7 rounded-full flex items-center justify-center text-white text-xs font-bold flex-shrink-0 mb-0.5', 
+        <div className={cn('w-7 h-7 rounded-full flex items-center justify-center text-white text-xs font-bold flex-shrink-0 mb-0.5 overflow-hidden', 
           avatarColor || 'bg-secondary',
           !showAvatar && 'opacity-0'
         )}>
-          {senderName?.[0]?.toUpperCase() || '?'}
+          {avatarUrl ? (
+            <img src={avatarUrl} alt="avatar" className="w-full h-full object-cover" />
+          ) : (
+            senderName?.[0]?.toUpperCase() || '?'
+          )}
         </div>
       )}
 
