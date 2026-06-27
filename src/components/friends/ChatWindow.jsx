@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { toast } from 'sonner';
 import { db } from '../../firebase';
-import { collection, addDoc, query, onSnapshot, where, or, and, doc, setDoc, updateDoc, FieldPath, writeBatch, deleteField } from 'firebase/firestore';
+import { collection, addDoc, query, onSnapshot, where, or, and, doc, setDoc, updateDoc, FieldPath, writeBatch, deleteField, serverTimestamp } from 'firebase/firestore';
 import { ArrowLeft } from 'lucide-react';
 import MessageBubble from '@/components/ui/MessageBubble';
 import ChatInput from '@/components/ui/ChatInput';
@@ -16,6 +16,15 @@ export default function ChatWindow({ friend, currentUser, onBack }) {
   const prevMessagesLengthRef = useRef(0);
   
   const channelId = [currentUser.email, friend.friend_email].sort().join('_');
+
+  const getMessageTime = (dateVal) => {
+    if (!dateVal) return Date.now();
+    if (typeof dateVal.toMillis === 'function') return dateVal.toMillis();
+    if (dateVal.seconds !== undefined) return dateVal.seconds * 1000 + (dateVal.nanoseconds || 0) / 1000000;
+    if (typeof dateVal === 'string') return new Date(dateVal).getTime();
+    if (dateVal instanceof Date) return dateVal.getTime();
+    return Date.now();
+  };
 
   useEffect(() => {
     const q = query(
@@ -33,7 +42,7 @@ export default function ChatWindow({ friend, currentUser, onBack }) {
     );
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const msgs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      const sorted = msgs.sort((a, b) => (a.created_date || '').localeCompare(b.created_date || ''));
+      const sorted = msgs.sort((a, b) => getMessageTime(a.created_date) - getMessageTime(b.created_date));
       setMessages(sorted.slice(-100));
     }, (error) => {
       console.error("Firestore onSnapshot error:", error);
@@ -106,7 +115,7 @@ export default function ChatWindow({ friend, currentUser, onBack }) {
         sender_email: currentUser.email,
         receiver_email: friend.friend_email,
         content: textContent,
-        created_date: new Date().toISOString(),
+        created_date: serverTimestamp(),
         status: 'sent',
         ...(imageUrl && { imageUrl }),
         ...(videoUrl && { videoUrl }),

@@ -2,11 +2,24 @@
  * Relative time in Vietnamese, using UTC timestamps correctly.
  * Fixes the "7 giờ trước" bug caused by timezone offset confusion.
  */
-export function timeAgo(dateStr) {
-    if (!dateStr) return '';
-    // Ensure the string is treated as UTC — append 'Z' if no timezone info present
-    const normalized = /[Zz]$|[+-]\d{2}:\d{2}$/.test(dateStr) ? dateStr : dateStr + 'Z';
-    const past = new Date(normalized).getTime();
+export function timeAgo(dateVal) {
+    if (!dateVal) return '';
+    let past;
+    if (typeof dateVal === 'string') {
+      // Ensure the string is treated as UTC — append 'Z' if no timezone info present
+      const normalized = /[Zz]$|[+-]\d{2}:\d{2}$/.test(dateVal) ? dateVal : dateVal + 'Z';
+      past = new Date(normalized).getTime();
+    } else if (typeof dateVal.toMillis === 'function') {
+      past = dateVal.toMillis();
+    } else if (dateVal instanceof Date) {
+      past = dateVal.getTime();
+    } else if (typeof dateVal === 'number') {
+      past = dateVal;
+    } else if (dateVal.seconds !== undefined) {
+      past = dateVal.seconds * 1000 + (dateVal.nanoseconds || 0) / 1000000;
+    } else {
+      past = new Date(dateVal).getTime();
+    }
     const now = Date.now();
     const diffMs = now - past;
   

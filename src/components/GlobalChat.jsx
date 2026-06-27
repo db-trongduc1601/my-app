@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { db } from '../firebase';
-import { collection, addDoc, query, where, onSnapshot, doc, setDoc, updateDoc, FieldPath, deleteField } from 'firebase/firestore';
+import { collection, addDoc, query, where, onSnapshot, doc, setDoc, updateDoc, FieldPath, deleteField, serverTimestamp } from 'firebase/firestore';
 import { X, MessageCircle } from 'lucide-react';
 import { motion } from 'framer-motion';
 import MessageBubble from '@/components/ui/MessageBubble';
@@ -22,6 +22,15 @@ export default function GlobalChat({ open, onClose, currentUser }) {
     return () => clearInterval(t);
   }, []);
 
+  const getMessageTime = (dateVal) => {
+    if (!dateVal) return Date.now();
+    if (typeof dateVal.toMillis === 'function') return dateVal.toMillis();
+    if (dateVal.seconds !== undefined) return dateVal.seconds * 1000 + (dateVal.nanoseconds || 0) / 1000000;
+    if (typeof dateVal === 'string') return new Date(dateVal).getTime();
+    if (dateVal instanceof Date) return dateVal.getTime();
+    return Date.now();
+  };
+
   useEffect(() => {
     if (!open) return;
 
@@ -33,7 +42,7 @@ export default function GlobalChat({ open, onClose, currentUser }) {
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const msgs = snapshot.docs
         .map(doc => ({ id: doc.id, ...doc.data() }))
-        .sort((a, b) => (a.created_date || '').localeCompare(b.created_date || ''));
+        .sort((a, b) => getMessageTime(a.created_date) - getMessageTime(b.created_date));
       
       setMessages(msgs.slice(-100)); // Keep last 100 messages
     }, (error) => {
@@ -116,7 +125,7 @@ export default function GlobalChat({ open, onClose, currentUser }) {
         sender_email: currentUser.email,
         receiver_email: 'global',
         content: textContent,
-        created_date: new Date().toISOString(),
+        created_date: serverTimestamp(),
         ...(imageUrl && { imageUrl }),
         ...(videoUrl && { videoUrl }),
         ...(voiceUrl && { voiceUrl })
