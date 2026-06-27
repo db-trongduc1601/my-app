@@ -198,13 +198,13 @@ export default function MusicTab({ tracks, onRefresh }) {
   const audioRef = useRef();
   const prevTrackId = useRef(null);
 
-  // Stop previous media when track changes
+  // Stop previous media and start selection instantly
   useEffect(() => {
     if (!nowPlaying) {
       setIsPlaying(false);
       return;
     }
-    // When switching tracks, set playing true (iframe gets autoplay=1 in src)
+
     if (prevTrackId.current !== nowPlaying.id) {
       prevTrackId.current = nowPlaying.id;
       setIsPlaying(true);
@@ -221,6 +221,13 @@ export default function MusicTab({ tracks, onRefresh }) {
     }
   }, [isPlaying]);
 
+  // When YouTube iframe becomes available and playback is desired,
+  // explicitly send play commands after the iframe is mounted.
+  useEffect(() => {
+    if (nowPlaying?.loai !== 'link' || !isPlaying) return;
+    sendYouTubeCommand('playVideo');
+  }, [nowPlaying?.id, isPlaying, sendYouTubeCommand]);
+
   // Control YouTube iframe via postMessage (only for pause/resume of already-loaded iframe)
   const sendYouTubeCommand = useCallback((func) => {
     try {
@@ -236,14 +243,22 @@ export default function MusicTab({ tracks, onRefresh }) {
     setIsPlaying(next);
 
     if (nowPlaying.loai === 'link') {
-      // postMessage only works on already-loaded iframes (pause/resume, not initial start)
       sendYouTubeCommand(next ? 'playVideo' : 'pauseVideo');
     }
   }, [isPlaying, nowPlaying, sendYouTubeCommand]);
 
   const handleSelectTrack = useCallback((track) => {
+    // If the same track is selected again, resume playback.
+    if (nowPlaying?.id === track.id) {
+      setIsPlaying(true);
+      if (track.loai === 'link') {
+        sendYouTubeCommand('playVideo');
+      }
+      return;
+    }
+
     // Stop current track first
-    if (nowPlaying && nowPlaying.id !== track.id) {
+    if (nowPlaying) {
       if (nowPlaying.loai === 'link') {
         sendYouTubeCommand('stopVideo');
       } else if (audioRef.current) {
@@ -251,8 +266,10 @@ export default function MusicTab({ tracks, onRefresh }) {
         audioRef.current.currentTime = 0;
       }
     }
+
+    prevTrackId.current = track.id;
     setNowPlaying(track);
-    // isPlaying will be set to true in useEffect above
+    setIsPlaying(true);
   }, [nowPlaying, sendYouTubeCommand]);
 
   const handleSave = async () => {
