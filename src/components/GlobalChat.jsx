@@ -10,6 +10,7 @@ export default function GlobalChat({ open, onClose, currentUser }) {
   const [messages, setMessages] = useState([]);
   const [typingUsers, setTypingUsers] = useState([]);
   const [replyTo, setReplyTo] = useState(null);
+  const [profiles, setProfiles] = useState({});
   const [tick, setTick] = useState(0);
   const bottomRef = useRef();
   const prevMessagesLengthRef = useRef(0);
@@ -44,9 +45,18 @@ export default function GlobalChat({ open, onClose, currentUser }) {
       setTypingUsers(users);
     });
 
+    const unsubProfiles = onSnapshot(collection(db, 'user_profiles'), (snap) => {
+      const profs = {};
+      snap.forEach(doc => {
+        profs[doc.data().email] = doc.data();
+      });
+      setProfiles(profs);
+    });
+
     return () => {
       unsubscribe();
       unsubTyping();
+      unsubProfiles();
     };
   }, [open]);
 
@@ -66,6 +76,8 @@ export default function GlobalChat({ open, onClose, currentUser }) {
       setTimeout(() => el.classList.remove('bg-primary/20'), 1500);
     }
   };
+
+  const getDisplayName = (email) => profiles[email]?.display_name || email?.split('@')[0] || 'Ẩn danh';
 
   const handleSend = async (textContent) => {
     if (!currentUser) return;
@@ -146,7 +158,6 @@ export default function GlobalChat({ open, onClose, currentUser }) {
   const typingName = typingUsers.length > 0 ? (typingUsers.length === 1 ? typingUsers[0].name : `${typingUsers.length} người`) : '';
   const isTyping = typingUsers.length > 0;
 
-  const getDisplayName = (email) => email?.split('@')[0] || 'Ẩn danh';
   const getColor = (email) => {
     if (!email) return 'bg-primary';
     const colors = ['bg-pink-400', 'bg-rose-400', 'bg-violet-400', 'bg-blue-400', 'bg-teal-400', 'bg-orange-400'];
@@ -206,6 +217,7 @@ export default function GlobalChat({ open, onClose, currentUser }) {
                 isMe={isMe}
                 senderName={!isMe ? name : undefined}
                 showAvatar={showAvatar}
+                avatarUrl={!isMe ? profiles[m.sender_email]?.photo_url : undefined}
                 avatarColor={color}
                 onReact={handleReact}
                 onUnsend={handleUnsend}
