@@ -6,6 +6,7 @@ import { collection, doc, addDoc, deleteDoc, setDoc, onSnapshot, query, where, g
 import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 
@@ -760,32 +761,27 @@ export default function MusicTab({ tracks, onRefresh }) {
       </div>
 
       {/* Invite Modal */}
-      <AnimatePresence>
-        {showInviteModal && (
-          <>
-            <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50" onClick={() => setShowInviteModal(false)} />
-            <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }}
-              className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[90%] max-w-sm liquid-glass-heavy rounded-3xl p-5 z-50 flex flex-col gap-4">
-              <div className="flex justify-between items-center">
-                <h3 className="font-semibold text-lg flex items-center gap-2"><Headphones size={20} className="text-primary"/> Rủ bạn cùng nghe</h3>
-                <button onClick={() => setShowInviteModal(false)} className="p-1 rounded-full hover:bg-white/10"><X size={18}/></button>
-              </div>
-              <div className="space-y-2 max-h-60 overflow-y-auto">
-                {friends.length === 0 ? (
-                  <p className="text-sm text-muted-foreground text-center py-4">Bạn chưa có bạn bè nào.</p>
-                ) : (
-                  friends.map(email => (
-                    <div key={email} className="flex items-center justify-between p-3 rounded-xl bg-white/5 hover:bg-white/10 transition-colors">
-                      <p className="text-sm font-medium truncate flex-1">{email.split('@')[0]}</p>
-                      <Button size="sm" onClick={() => handleInviteFriend(email)} className="h-8 rounded-lg gradient-primary text-xs">Mời</Button>
-                    </div>
-                  ))
-                )}
-              </div>
-            </motion.div>
-          </>
-        )}
-      </AnimatePresence>
+      <Dialog open={showInviteModal} onOpenChange={setShowInviteModal}>
+        <DialogContent className="w-[90%] max-w-sm rounded-3xl p-5 liquid-glass-heavy border-none">
+          <DialogHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <DialogTitle className="flex items-center gap-2 text-lg font-semibold">
+              <Headphones size={20} className="text-primary"/> Rủ bạn cùng nghe
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-2 max-h-60 overflow-y-auto mt-2 pr-1">
+            {friends.length === 0 ? (
+              <p className="text-sm text-muted-foreground text-center py-4">Bạn chưa có bạn bè nào.</p>
+            ) : (
+              friends.map(email => (
+                <div key={email} className="flex items-center justify-between p-3 rounded-xl bg-white/5 hover:bg-white/10 transition-colors">
+                  <p className="text-sm font-medium truncate flex-1">{email.split('@')[0]}</p>
+                  <Button size="sm" onClick={() => handleInviteFriend(email)} className="h-8 rounded-lg gradient-primary text-xs">Mời</Button>
+                </div>
+              ))
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </>
   );
 }
