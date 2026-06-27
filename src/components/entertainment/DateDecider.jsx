@@ -1,4 +1,4 @@
-﻿import { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { MapPin, Clock, Ticket, RefreshCw, Plus, X, Loader2 } from 'lucide-react';
 import { db } from '../../firebase';
@@ -62,9 +62,17 @@ function ScratchOverlay({ onRevealed }) {
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
+    
+    // Measure bounding rect first
+    const rect = canvas.getBoundingClientRect();
+    const w = Math.round(rect.width);
+    const h = Math.round(rect.height);
+    
+    // Set buffer size to match visual size
+    canvas.width = w;
+    canvas.height = h;
+
     const ctx = canvas.getContext('2d');
-    const w = canvas.width;
-    const h = canvas.height;
 
     // Silver foil gradient
     const grad = ctx.createLinearGradient(0, 0, w, h);
@@ -135,8 +143,6 @@ function ScratchOverlay({ onRevealed }) {
   return (
     <canvas
       ref={canvasRef}
-      width={320}
-      height={90}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}
