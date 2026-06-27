@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/input';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'sonner';
 import ChatWindow from './ChatWindow';
+import { useAuth } from '@/lib/AuthContext';
 
 function generateFriendCode(email) {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
@@ -31,6 +32,7 @@ export default function FriendsSidebar({ open, onClose, currentUser }) {
   const [editNick, setEditNick] = useState('');
   const [chatFriend, setChatFriend] = useState(null);
   const [allProfiles, setAllProfiles] = useState([]);
+  const { unreadCountBySender } = useAuth();
 
   const myCode = currentUser ? generateFriendCode(currentUser.email) : '';
 
@@ -451,6 +453,8 @@ export default function FriendsSidebar({ open, onClose, currentUser }) {
                       }
                     }
 
+                    const unreadCount = unreadCountBySender?.[f.email?.toLowerCase()] || 0;
+
                     return (
                       <div key={r.id} className="liquid-glass liquid-glass-interactive rounded-2xl p-3 space-y-2">
                         <div className="flex items-center gap-3">
@@ -475,7 +479,16 @@ export default function FriendsSidebar({ open, onClose, currentUser }) {
                                 <button onClick={() => handleSaveNick(r)} className="text-primary text-xs font-medium px-1">OK</button>
                               </div>
                             ) : (
-                              <p className="font-medium text-sm truncate">{f.displayName}</p>
+                              <div className="flex items-center gap-1.5">
+                                <p className={cn("font-medium text-sm truncate", unreadCount > 0 && "font-bold text-foreground")}>
+                                  {f.displayName}
+                                </p>
+                                {unreadCount > 0 && (
+                                  <span className="min-w-4 h-4 bg-primary text-white text-[9px] font-bold rounded-full flex items-center justify-center flex-shrink-0 px-1">
+                                    {unreadCount > 9 ? '9+' : unreadCount}
+                                  </span>
+                                )}
+                              </div>
                             )}
                             <div className="flex items-center gap-1.5 mt-0.5">
                               {isOnline ? (

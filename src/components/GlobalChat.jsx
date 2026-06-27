@@ -108,7 +108,7 @@ export default function GlobalChat({ open, onClose, currentUser }) {
     return profiles[lower]?.display_name || friendNicknames[lower] || email.split('@')[0];
   };
 
-  const handleSend = async (textContent) => {
+  const handleSend = async (textContent, imageUrl = null, videoUrl = null, voiceUrl = null) => {
     if (!currentUser) return;
 
     try {
@@ -116,7 +116,10 @@ export default function GlobalChat({ open, onClose, currentUser }) {
         sender_email: currentUser.email,
         receiver_email: 'global',
         content: textContent,
-        created_date: new Date().toISOString()
+        created_date: new Date().toISOString(),
+        ...(imageUrl && { imageUrl }),
+        ...(videoUrl && { videoUrl }),
+        ...(voiceUrl && { voiceUrl })
       };
 
       if (replyTo) {

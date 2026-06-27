@@ -12,6 +12,7 @@ import { auth } from '../firebase';
 import { signOut, onAuthStateChanged } from 'firebase/auth';
 import { useToast } from "@/components/ui/use-toast";
 import { registerFCMToken } from "@/hooks/useNotifications";
+import { useAuth } from '@/lib/AuthContext';
 
 
 
@@ -22,6 +23,7 @@ export default function Layout() {
   const [profileOpen, setProfileOpen] = useState(false);
   const { toast } = useToast();
   const [showNotificationPrompt, setShowNotificationPrompt] = useState(false);
+  const { totalUnreadCount } = useAuth();
   
   // Lắng nghe thay đổi User Auth (Kể cả khi F5) và lưu local state
   const [localUser, setLocalUser] = useState(auth.currentUser);
@@ -104,10 +106,15 @@ export default function Layout() {
           {/* Friends icon - top left */}
           <button
             onClick={() => setFriendsOpen(true)}
-            className="w-7 h-7 rounded-full flex items-center justify-center hover:bg-white/20 transition-colors"
+            className="relative w-7 h-7 rounded-full flex items-center justify-center hover:bg-white/20 transition-colors"
             title="Bạn bè"
           >
             <Users size={14} className="text-muted-foreground" />
+            {totalUnreadCount > 0 && (
+              <span className="absolute -top-0.5 -right-0.5 min-w-4 h-4 bg-primary text-white text-[9px] font-bold rounded-full flex items-center justify-center px-1">
+                {totalUnreadCount > 9 ? '9+' : totalUnreadCount}
+              </span>
+            )}
           </button>
 
           {/* Global Chat icon - next to friends */}

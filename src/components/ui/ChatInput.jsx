@@ -1,7 +1,8 @@
 import { useState, useRef, useEffect } from 'react';
-import { Send, Loader2, Image as ImageIcon, X } from 'lucide-react';
+import { Send, Loader2, Image as ImageIcon, X, Mic } from 'lucide-react';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { storage } from '../../firebase';
+import { toast } from 'sonner';
 
 export default function ChatInput({ 
   onSend, 
@@ -15,9 +16,12 @@ export default function ChatInput({
 }) {
   const [text, setText] = useState('');
   const [sending, setSending] = useState(false);
+  const [isRecording, setIsRecording] = useState(false);
   const fileInputRef = useRef(null);
   const typingTimeoutRef = useRef(null);
   const inputRef = useRef(null);
+  const mediaRecorderRef = useRef(null);
+  const audioChunksRef = useRef([]);
 
   // Clear typing timeout on unmount
   useEffect(() => {
@@ -70,9 +74,32 @@ export default function ChatInput({
     }
   };
 
-  const handleImageSelect = async (e) => {
+  const handleFileSelect = async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
+
+    if (file.type.startsWith('video/')) {
+      if (file.size > 25 * 1024 * 1024) {
+        toast.error("Video quá lớn! Vui lòng chọn video dưới 25MB.");
+        if (fileInputRef.current) fileInputRef.current.value = '';
+        return;
+      }
+      setSending(true);
+      try {
+        const fileName = `videos/${Date.now()}_${file.name.replace(/[^a-zA-Z0-9.]/g, '')}`;
+        const storageRef = ref(storage, fileName);
+        await uploadBytes(storageRef, file);
+        const url = await getDownloadURL(storageRef);
+        await onSend('', null, url);
+      } catch (error) {
+        console.error("Lỗi upload video:", error);
+        toast.error("Lỗi upload video!");
+      } finally {
+        setSending(false);
+        if (fileInputRef.current) fileInputRef.current.value = '';
+      }
+      return;
+    }
 
     setSending(true);
     try {
@@ -116,6 +143,63 @@ export default function ChatInput({
     }
   };
 
+  const startRecording = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const types = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4', 'audio/mp4;codecs=mp4a.40.2'];
+      let options = {};
+      for (const t of types) {
+        if (MediaRecorder.isTypeSupported(t)) {
+          options.mimeType = t;
+          break;
+        }
+      }
+      const mediaRecorder = new MediaRecorder(stream, options);
+      mediaRecorderRef.current = mediaRecorder;
+      audioChunksRef.current = [];
+
+      mediaRecorder.ondataavailable = (event) => {
+        if (event.data.size > 0) {
+          audioChunksRef.current.push(event.data);
+        }
+      };
+
+      mediaRecorder.start();
+      setIsRecording(true);
+    } catch (err) {
+      console.error("Mic error:", err);
+      toast.error("Không thể truy cập microphone!");
+    }
+  };
+
+  const stopRecording = () => {
+    if (mediaRecorderRef.current && isRecording) {
+      mediaRecorderRef.current.onstop = async () => {
+        const mimeType = mediaRecorderRef.current.mimeType;
+        const blob = new Blob(audioChunksRef.current, { type: mimeType });
+        const ext = mimeType.includes('mp4') ? 'mp4' : 'webm';
+        
+        setSending(true);
+        try {
+          const fileName = `voice/${Date.now()}.${ext}`;
+          const storageRef = ref(storage, fileName);
+          await uploadBytes(storageRef, blob);
+          const url = await getDownloadURL(storageRef);
+          await onSend('', null, null, url);
+        } catch (error) {
+          console.error("Voice error:", error);
+          toast.error("Lỗi gửi tin nhắn thoại!");
+        } finally {
+          setSending(false);
+        }
+        
+        mediaRecorderRef.current.stream.getTracks().forEach(track => track.stop());
+      };
+      mediaRecorderRef.current.stop();
+      setIsRecording(false);
+    }
+  };
+
   return (
     <div className="flex flex-col flex-shrink-0">
       {/* Reply Preview */}
@@ -150,35 +234,54 @@ export default function ChatInput({
       <div className="px-3 py-3 flex gap-2 flex-shrink-0 liquid-glass rim-light rounded-none items-center">
         <input 
           type="file" 
-          accept="image/*" 
+          accept="image/*,video/*" 
           className="hidden" 
           ref={fileInputRef}
-          onChange={handleImageSelect} 
+          onChange={handleFileSelect} 
         />
         <button 
           onClick={() => fileInputRef.current?.click()}
-          disabled={disabled || sending}
+          disabled={disabled || sending || isRecording}
           className="p-2 rounded-xl hover:bg-black/5 text-muted-foreground transition-colors disabled:opacity-50"
         >
           <ImageIcon size={20} />
         </button>
 
-        <input
-          ref={inputRef}
-          value={text}
-          onChange={handleChange}
-          onKeyDown={e => e.key === 'Enter' && !e.shiftKey && handleSend()}
-          placeholder={placeholder}
-          disabled={disabled}
-          className="flex-1 liquid-glass-sm rounded-xl px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-primary/50 placeholder:text-muted-foreground disabled:opacity-50 transition-all"
-        />
-        <button
-          onClick={handleSend}
-          disabled={!text.trim() || disabled || sending}
-          className="w-9 h-9 rounded-xl gradient-primary text-primary-foreground flex items-center justify-center disabled:opacity-40 flex-shrink-0 hover:opacity-90 transition-opacity"
-        >
-          {sending ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
-        </button>
+        {isRecording ? (
+          <div className="flex-1 liquid-glass-sm rounded-xl px-3 py-2 text-sm text-destructive font-medium flex items-center justify-center animate-pulse">
+            Đang ghi âm... Thả ra để gửi
+          </div>
+        ) : (
+          <input
+            ref={inputRef}
+            value={text}
+            onChange={handleChange}
+            onKeyDown={e => e.key === 'Enter' && !e.shiftKey && handleSend()}
+            placeholder={placeholder}
+            disabled={disabled}
+            className="flex-1 liquid-glass-sm rounded-xl px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-primary/50 placeholder:text-muted-foreground disabled:opacity-50 transition-all"
+          />
+        )}
+        
+        {!text.trim() ? (
+          <button
+            onPointerDown={(e) => { e.preventDefault(); startRecording(); }}
+            onPointerUp={(e) => { e.preventDefault(); stopRecording(); }}
+            onPointerLeave={(e) => { e.preventDefault(); stopRecording(); }}
+            disabled={disabled || sending}
+            className="w-9 h-9 rounded-xl bg-secondary text-secondary-foreground flex items-center justify-center disabled:opacity-40 flex-shrink-0 hover:bg-secondary/80 transition-colors"
+          >
+            <Mic size={14} className={isRecording ? "text-destructive animate-pulse" : ""} />
+          </button>
+        ) : (
+          <button
+            onClick={handleSend}
+            disabled={disabled || sending}
+            className="w-9 h-9 rounded-xl gradient-primary text-primary-foreground flex items-center justify-center disabled:opacity-40 flex-shrink-0 hover:opacity-90 transition-opacity"
+          >
+            {sending ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
+          </button>
+        )}
       </div>
     </div>
   );

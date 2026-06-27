@@ -100,14 +100,17 @@ export default function ChatWindow({ friend, currentUser, onBack }) {
     }
   };
 
-  const handleSend = async (textContent) => {
+  const handleSend = async (textContent, imageUrl = null, videoUrl = null, voiceUrl = null) => {
     try {
       const msgData = {
         sender_email: currentUser.email,
         receiver_email: friend.friend_email,
         content: textContent,
         created_date: new Date().toISOString(),
-        status: 'sent'
+        status: 'sent',
+        ...(imageUrl && { imageUrl }),
+        ...(videoUrl && { videoUrl }),
+        ...(voiceUrl && { voiceUrl })
       };
 
       if (replyTo) {
@@ -231,51 +234,58 @@ export default function ChatWindow({ friend, currentUser, onBack }) {
 
       {/* Messages */}
       <div className="flex-1 overflow-y-auto px-4 py-3 min-h-0 flex flex-col">
-        {messages.map((m, i) => {
-          const isMe = m.sender_email === currentUser.email;
-          const prevMsg = messages[i - 1];
-          const nextMsg = messages[i + 1];
-          
-          const isFirst = prevMsg?.sender_email !== m.sender_email;
-          const isLast = nextMsg?.sender_email !== m.sender_email;
-          const showAvatar = !isMe && isLast;
+        {(() => {
+          const lastReadMessageId = [...messages]
+            .reverse()
+            .find(m => m.sender_email === currentUser.email && m.status === 'read')?.id;
 
-          let msgObj = m;
-          if (msgObj.replyTo && !msgObj.replyTo.sender_email) {
-            const orig = messages.find(x => x.id === msgObj.replyTo.id);
-            if (orig) {
-              msgObj = { ...m, replyTo: { ...m.replyTo, sender_email: orig.sender_email } };
+          return messages.map((m, i) => {
+            const isMe = m.sender_email === currentUser.email;
+            const prevMsg = messages[i - 1];
+            const nextMsg = messages[i + 1];
+            
+            const isFirst = prevMsg?.sender_email !== m.sender_email;
+            const isLast = nextMsg?.sender_email !== m.sender_email;
+            const showAvatar = !isMe && isLast;
+
+            let msgObj = m;
+            if (msgObj.replyTo && !msgObj.replyTo.sender_email) {
+              const orig = messages.find(x => x.id === msgObj.replyTo.id);
+              if (orig) {
+                msgObj = { ...m, replyTo: { ...m.replyTo, sender_email: orig.sender_email } };
+              }
             }
-          }
 
-          const localProfiles = {
-            [currentUser.email.toLowerCase()]: { photo_url: currentUser.photoURL || null, display_name: currentUser.displayName || currentUser.email.split('@')[0] },
-            [friend.friend_email.toLowerCase()]: { photo_url: friendPresence?.photo_url || null, display_name: friendPresence?.display_name || friend.friend_email.split('@')[0] }
-          };
-          const localNicknames = {
-            [friend.friend_email.toLowerCase()]: friend.nickname
-          };
+            const localProfiles = {
+              [currentUser.email.toLowerCase()]: { photo_url: currentUser.photoURL || null, display_name: currentUser.displayName || currentUser.email.split('@')[0] },
+              [friend.friend_email.toLowerCase()]: { photo_url: friendPresence?.photo_url || null, display_name: friendPresence?.display_name || friend.friend_email.split('@')[0] }
+            };
+            const localNicknames = {
+              [friend.friend_email.toLowerCase()]: friend.nickname
+            };
 
-          return (
-            <MessageBubble 
-              key={m.id} 
-              message={msgObj} 
-              isMe={isMe} 
-              onReact={handleReact}
-              onUnsend={handleUnsend}
-              onReply={handleReply}
-              isFirst={isFirst}
-              isLast={isLast}
-              onScrollToReplied={handleScrollToMessage}
-              showAvatar={showAvatar}
-              senderName={!isMe ? displayName : undefined}
-              avatarUrl={!isMe ? friendPresence?.photo_url : undefined}
-              profiles={localProfiles}
-              friendNicknames={localNicknames}
-              currentUserEmail={currentUser.email}
-            />
-          );
-        })}
+            return (
+              <MessageBubble 
+                key={m.id} 
+                message={msgObj} 
+                isMe={isMe} 
+                onReact={handleReact}
+                onUnsend={handleUnsend}
+                onReply={handleReply}
+                isFirst={isFirst}
+                isLast={isLast}
+                onScrollToReplied={handleScrollToMessage}
+                showAvatar={showAvatar}
+                senderName={!isMe ? displayName : undefined}
+                avatarUrl={!isMe ? friendPresence?.photo_url : undefined}
+                profiles={localProfiles}
+                friendNicknames={localNicknames}
+                currentUserEmail={currentUser.email}
+                isLastRead={m.id === lastReadMessageId}
+              />
+            );
+          });
+        })()}
         <div ref={bottomRef} />
       </div>
 

@@ -1,6 +1,7 @@
 import React, { createContext, useState, useContext, useEffect } from 'react';
-import { auth } from '../firebase';
+import { auth, db } from '../firebase';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
+import { collection, query, where, onSnapshot } from 'firebase/firestore';
 import { usePresenceHeartbeat } from '../hooks/usePresenceHeartbeat';
 
 const AuthContext = createContext();
@@ -12,10 +13,16 @@ export const AuthProvider = ({ children }) => {
   const [authChecked, setAuthChecked] = useState(false);
   const [authError, setAuthError] = useState(null);
 
+  // Unread messages state
+  const [totalUnreadCount, setTotalUnreadCount] = useState(0);
+  const [unreadCountBySender, setUnreadCountBySender] = useState({});
+
   // Kích hoạt heartbeat presence
   usePresenceHeartbeat(user);
 
   useEffect(() => {
+    let unreadUnsubscribe = null;
+
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
       if (currentUser) {
         // ========================================================
@@ -48,13 +55,47 @@ export const AuthProvider = ({ children }) => {
       setAuthError(null);
       setIsLoadingAuth(false);
       setAuthChecked(true);
+
+      // Bắt đầu lắng nghe tin nhắn chưa đọc
+      if (unreadUnsubscribe) {
+        unreadUnsubscribe();
+      }
+      if (currentUser && currentUser.email) {
+        const q = query(
+          collection(db, 'messages'),
+          where('receiver_email', '==', currentUser.email.toLowerCase()),
+          where('status', 'in', ['sent', 'delivered'])
+        );
+        unreadUnsubscribe = onSnapshot(q, (snapshot) => {
+          let total = 0;
+          const breakdown = {};
+          snapshot.forEach(doc => {
+            const sender = doc.data().sender_email?.toLowerCase();
+            if (sender) {
+              breakdown[sender] = (breakdown[sender] || 0) + 1;
+              total++;
+            }
+          });
+          setTotalUnreadCount(total);
+          setUnreadCountBySender(breakdown);
+        }, (err) => {
+          console.error("Lỗi lấy unread messages:", err);
+        });
+      } else {
+        setTotalUnreadCount(0);
+        setUnreadCountBySender({});
+      }
+
     }, (error) => {
       console.error("Auth status change error:", error);
       setIsLoadingAuth(false);
       setAuthChecked(true);
     });
 
-    return () => unsubscribe();
+    return () => {
+      unsubscribe();
+      if (unreadUnsubscribe) unreadUnsubscribe();
+    };
   }, []);
 
   const logout = async () => {
@@ -89,7 +130,9 @@ export const AuthProvider = ({ children }) => {
       logout,
       navigateToLogin,
       checkUserAuth,
-      checkAppState
+      checkAppState,
+      totalUnreadCount,
+      unreadCountBySender
     }}>
       {children}
     </AuthContext.Provider>

@@ -1,9 +1,91 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { Play, Pause } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { timeAgo } from '@/lib/timeAgo';
 
 const EMOJIS = ['❤️', '😂', '😮', '😢', '👍', '🙏'];
+
+function ChatAudioPlayer({ src }) {
+  const [playing, setPlaying] = useState(false);
+  const audioRef = useRef();
+  const canvasRef = useRef();
+  const animRef = useRef();
+  const analyserRef = useRef();
+  const ctxRef = useRef();
+
+  useEffect(() => {
+    return () => {
+      if (animRef.current) cancelAnimationFrame(animRef.current);
+    };
+  }, []);
+
+  const startViz = () => {
+    const audio = audioRef.current;
+    if (!audio) return;
+    if (!ctxRef.current) {
+      const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      const srcNode = audioCtx.createMediaElementSource(audio);
+      const analyser = audioCtx.createAnalyser();
+      analyser.fftSize = 64;
+      srcNode.connect(analyser);
+      analyser.connect(audioCtx.destination);
+      analyserRef.current = analyser;
+      ctxRef.current = audioCtx;
+    }
+    const draw = () => {
+      const canvas = canvasRef.current;
+      if (!canvas) return;
+      const ctx = canvas.getContext('2d');
+      const data = new Uint8Array(analyserRef.current.frequencyBinCount);
+      analyserRef.current.getByteFrequencyData(data);
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      const barW = canvas.width / data.length;
+      data.forEach((v, i) => {
+        const h = (v / 255) * canvas.height;
+        ctx.fillStyle = `hsl(340, 97%, ${55 + (v / 255) * 20}%)`;
+        ctx.fillRect(i * barW, canvas.height/2 - h/2, barW - 1, h);
+      });
+      animRef.current = requestAnimationFrame(draw);
+    };
+    draw();
+  };
+
+  const stopViz = () => {
+    if (animRef.current) cancelAnimationFrame(animRef.current);
+    const canvas = canvasRef.current;
+    if (canvas) canvas.getContext('2d').clearRect(0, 0, canvas.width, canvas.height);
+  };
+
+  const handleToggle = (e) => {
+    e.stopPropagation();
+    const audio = audioRef.current;
+    if (!audio) return;
+    if (playing) {
+      audio.pause();
+      stopViz();
+      setPlaying(false);
+    } else {
+      audio.play().then(() => {
+        startViz();
+        setPlaying(true);
+      }).catch(e => console.error(e));
+    }
+  };
+
+  return (
+    <div className="flex items-center gap-2 py-1 min-w-[150px] max-w-[200px]" onClick={e => e.stopPropagation()}>
+      <audio ref={audioRef} src={src} onEnded={() => { stopViz(); setPlaying(false); }} />
+      <button 
+        onClick={handleToggle}
+        className="w-7 h-7 rounded-full bg-black/20 dark:bg-white/20 text-current flex items-center justify-center hover:opacity-80 transition-opacity flex-shrink-0"
+      >
+        {playing ? <Pause size={12} /> : <Play size={12} className="ml-0.5" />}
+      </button>
+      <canvas ref={canvasRef} width={100} height={20} className="rounded-sm bg-black/5 dark:bg-white/5 flex-1 h-5" />
+    </div>
+  );
+}
 
 const MessageBubbleComponent = ({ 
   message, 
@@ -20,7 +102,8 @@ const MessageBubbleComponent = ({
   onScrollToReplied,
   profiles = {},
   friendNicknames = {},
-  currentUserEmail
+  currentUserEmail,
+  isLastRead
 }) => {
   const [showActions, setShowActions] = useState(false);
 
@@ -160,6 +243,19 @@ const MessageBubbleComponent = ({
                     className="max-w-full rounded-lg mb-1 object-cover max-h-[300px]" 
                   />
                 )}
+                {message.videoUrl && (
+                  <video 
+                    src={message.videoUrl} 
+                    controls 
+                    playsInline
+                    className="max-w-full rounded-lg mb-1 object-cover max-h-[300px] bg-black/10" 
+                  />
+                )}
+                {message.voiceUrl && (
+                  <div className="mb-1">
+                    <ChatAudioPlayer src={message.voiceUrl} />
+                  </div>
+                )}
                 {message.content && <span className="block">{message.content}</span>}
               </>
             )}
@@ -193,15 +289,31 @@ const MessageBubbleComponent = ({
         </div>
 
         {/* Time & Status */}
-        {isLast && (
+        {(isLast || (isMe && isLastRead)) && (
           <div className="flex items-center gap-1 mt-0.5 px-1">
-            <span className={cn('text-[10px]', isMe ? 'text-primary/70' : 'text-muted-foreground')}>
-              {timeAgo(message.created_date)}
-            </span>
-            {isMe && !message.isDeleted && (
-              <span className="text-[10px] text-primary/70">
-                {message.status === 'read' ? '✓✓' : message.status === 'delivered' ? '✓✓' : '✓'}
+            {isLast && (
+              <span className={cn('text-[10px]', isMe ? 'text-primary/70' : 'text-muted-foreground')}>
+                {timeAgo(message.created_date)}
               </span>
+            )}
+            {isMe && !message.isDeleted && (
+              <div className="flex items-center ml-1">
+                {message.status === 'sent' && isLast && (
+                  <span className="text-[10px] text-primary/70">✓</span>
+                )}
+                {message.status === 'delivered' && isLast && (
+                  <span className="text-[10px] text-muted-foreground/60">✓✓</span>
+                )}
+                {message.status === 'read' && isLastRead && (
+                  <div className="w-3.5 h-3.5 rounded-full overflow-hidden flex items-center justify-center bg-secondary text-[7px] font-bold text-white ring-1 ring-white/10 flex-shrink-0">
+                    {resolveAvatar(message.receiver_email) ? (
+                      <img src={resolveAvatar(message.receiver_email)} alt="seen" className="w-full h-full object-cover" />
+                    ) : (
+                      resolveName(message.receiver_email)?.[0]?.toUpperCase() || '?'
+                    )}
+                  </div>
+                )}
+              </div>
             )}
           </div>
         )}
@@ -218,6 +330,7 @@ export default React.memo(MessageBubbleComponent, (prev, next) => {
     prev.showAvatar === next.showAvatar &&
     prev.avatarColor === next.avatarColor &&
     prev.senderName === next.senderName &&
+    prev.isLastRead === next.isLastRead &&
     JSON.stringify(prev.message) === JSON.stringify(next.message)
   );
 });
