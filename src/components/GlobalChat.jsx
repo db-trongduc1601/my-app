@@ -117,7 +117,8 @@ export default function GlobalChat({ open, onClose, currentUser }) {
         msgData.replyTo = {
           id: replyTo.id,
           content: replyTo.content,
-          senderName: replyTo.sender_email === currentUser.email ? 'Bạn' : getDisplayName(replyTo.sender_email)
+          senderName: replyTo.sender_email === currentUser.email ? 'Bạn' : getDisplayName(replyTo.sender_email),
+          sender_email: replyTo.sender_email
         };
       }
 
@@ -248,6 +249,9 @@ export default function GlobalChat({ open, onClose, currentUser }) {
                 isFirst={isFirst}
                 isLast={isLast}
                 onScrollToReplied={handleScrollToMessage}
+                profiles={profiles}
+                friendNicknames={friendNicknames}
+                currentUserEmail={currentUser?.email}
               />
             );
           })}

@@ -114,7 +114,8 @@ export default function ChatWindow({ friend, currentUser, onBack }) {
         msgData.replyTo = {
           id: replyTo.id,
           content: replyTo.content,
-          senderName: replyTo.sender_email === currentUser.email ? 'Bạn' : (friend.nickname || friend.friend_email.split('@')[0])
+          senderName: replyTo.sender_email === currentUser.email ? 'Bạn' : (friend.nickname || friend.friend_email.split('@')[0]),
+          sender_email: replyTo.sender_email
         };
       }
 
@@ -231,6 +232,14 @@ export default function ChatWindow({ friend, currentUser, onBack }) {
           const isLast = nextMsg?.sender_email !== m.sender_email;
           const showAvatar = !isMe && isLast;
 
+          const localProfiles = {
+            [currentUser.email]: { photo_url: currentUser.photoURL || null, display_name: currentUser.displayName || currentUser.email.split('@')[0] },
+            [friend.friend_email]: { photo_url: friendPresence?.photo_url || null, display_name: friendPresence?.display_name || friend.friend_email.split('@')[0] }
+          };
+          const localNicknames = {
+            [friend.friend_email]: friend.nickname
+          };
+
           return (
             <MessageBubble 
               key={m.id} 
@@ -245,6 +254,9 @@ export default function ChatWindow({ friend, currentUser, onBack }) {
               showAvatar={showAvatar}
               senderName={!isMe ? displayName : undefined}
               avatarUrl={!isMe ? friendPresence?.photo_url : undefined}
+              profiles={localProfiles}
+              friendNicknames={localNicknames}
+              currentUserEmail={currentUser.email}
             />
           );
         })}

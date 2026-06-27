@@ -17,7 +17,10 @@ const MessageBubbleComponent = ({
   onReact,
   isFirst = true,
   isLast = true,
-  onScrollToReplied
+  onScrollToReplied,
+  profiles = {},
+  friendNicknames = {},
+  currentUserEmail
 }) => {
   const [showActions, setShowActions] = useState(false);
 
@@ -27,6 +30,16 @@ const MessageBubbleComponent = ({
   const handleReact = (emoji) => {
     if (onReact) onReact(message.id, emoji);
     setShowActions(false);
+  };
+
+  const resolveName = (email) => {
+    if (!email) return 'Ẩn danh';
+    if (email === currentUserEmail) return 'Bạn';
+    return friendNicknames[email] || profiles[email]?.display_name || email.split('@')[0];
+  };
+
+  const resolveAvatar = (email) => {
+    return profiles[email]?.photo_url;
   };
 
   return (
@@ -132,7 +145,9 @@ const MessageBubbleComponent = ({
                     onClick={(e) => { e.stopPropagation(); onScrollToReplied && onScrollToReplied(message.replyTo.id); }}
                     className="text-xs bg-black/10 rounded p-1.5 mb-1 border-l-2 border-primary/50 text-left cursor-pointer hover:bg-black/20 transition-colors"
                   >
-                    <span className="font-semibold block text-[10px] opacity-80">{message.replyTo.senderName}</span>
+                    <span className="font-semibold block text-[10px] opacity-80">
+                      {message.replyTo.sender_email ? resolveName(message.replyTo.sender_email) : message.replyTo.senderName}
+                    </span>
                     <p className="truncate max-w-[150px] sm:max-w-[200px] text-xs opacity-90">{message.replyTo.content || '[Hình ảnh]'}</p>
                   </div>
                 )}
@@ -162,8 +177,12 @@ const MessageBubbleComponent = ({
               {reactorEmails.length > 1 && <span className="font-medium text-[9px] px-0.5">{reactorEmails.length}</span>}
               <div className="flex -space-x-1 ml-0.5">
                  {reactorEmails.slice(0, 3).map((email, idx) => (
-                   <div key={idx} className="w-3.5 h-3.5 rounded-full bg-secondary flex items-center justify-center text-[7px] font-bold text-white border border-background z-20">
-                     {email.split('@')[0][0].toUpperCase()}
+                   <div key={idx} className="w-3.5 h-3.5 rounded-full bg-secondary flex items-center justify-center text-[7px] font-bold text-white border border-background z-20 overflow-hidden">
+                     {resolveAvatar(email) ? (
+                       <img src={resolveAvatar(email)} alt="avatar" className="w-full h-full object-cover" />
+                     ) : (
+                       email.split('@')[0][0].toUpperCase()
+                     )}
                    </div>
                  ))}
               </div>
