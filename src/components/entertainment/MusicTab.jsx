@@ -566,6 +566,16 @@ export default function MusicTab({ tracks, onRefresh }) {
     } catch (e) {}
   };
 
+  const handleLeaveSession = async () => {
+    if (activeSession) {
+      try {
+        await setDoc(doc(db, 'listening_sessions', activeSession.id), { status: 'ended' }, { merge: true });
+        setActiveSession(null);
+        toast.info("Đã thoát chế độ nghe chung.");
+      } catch (e) {}
+    }
+  };
+
   const handleSave = async () => {
     if (!form.ten_bai) return;
     setSaving(true);
@@ -784,8 +794,14 @@ export default function MusicTab({ tracks, onRefresh }) {
         {/* Track list */}
         <div className="space-y-2 relative">
           {activeSession?.role === 'guest' && (
-             <div className="absolute inset-0 z-10 bg-background/50 backdrop-blur-[1px] flex items-center justify-center rounded-2xl">
-                <p className="text-sm font-semibold text-primary liquid-glass px-4 py-2 rounded-xl">Bạn đang ở chế độ Nghe chung 🎧</p>
+             <div className="absolute inset-0 z-10 bg-background/50 backdrop-blur-[1px] flex flex-col items-center justify-center rounded-2xl gap-3">
+                <p className="text-sm font-semibold text-primary liquid-glass px-4 py-2 rounded-xl shadow-lg">Bạn đang ở chế độ Nghe chung 🎧</p>
+                <button 
+                  onClick={handleLeaveSession}
+                  className="px-4 py-1.5 rounded-full bg-destructive/10 text-destructive text-xs font-bold hover:bg-destructive/20 hover:scale-105 transition-all shadow-sm border border-destructive/20"
+                >
+                  Thoát nghe chung
+                </button>
              </div>
           )}
           {tracks.length === 0 ? (

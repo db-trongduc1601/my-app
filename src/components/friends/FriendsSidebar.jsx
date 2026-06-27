@@ -83,13 +83,31 @@ export default function FriendsSidebar({ open, onClose, currentUser }) {
       const profiles = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       setAllProfiles(profiles);
       
-      // Auto-register my profile if not exist
+      // Auto-register or sync my profile
       if (currentUser && currentUser.email) {
         const mine = profiles.find(p => p.email === currentUser.email);
+        const authName = currentUser.displayName || '';
+        const authPhoto = currentUser.photoURL || '';
+        
         if (!mine) {
           try {
-            await addDoc(collection(db, 'user_profiles'), { email: currentUser.email, friend_code: myCode });
+            await addDoc(collection(db, 'user_profiles'), { 
+              email: currentUser.email, 
+              friend_code: myCode,
+              display_name: authName,
+              photo_url: authPhoto
+            });
           } catch(e) {}
+        } else {
+          // Sync if out of sync with Auth (for users who created accounts before profile feature)
+          if (mine.display_name !== authName || mine.photo_url !== authPhoto) {
+            try {
+              await updateDoc(doc(db, 'user_profiles', mine.id), {
+                display_name: authName,
+                photo_url: authPhoto
+              });
+            } catch(e) {}
+          }
         }
       }
     });
