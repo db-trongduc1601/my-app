@@ -236,6 +236,14 @@ export default function ChatWindow({ friend, currentUser, onBack }) {
           const isLast = nextMsg?.sender_email !== m.sender_email;
           const showAvatar = !isMe && isLast;
 
+          let msgObj = m;
+          if (msgObj.replyTo && !msgObj.replyTo.sender_email) {
+            const orig = messages.find(x => x.id === msgObj.replyTo.id);
+            if (orig) {
+              msgObj = { ...m, replyTo: { ...m.replyTo, sender_email: orig.sender_email } };
+            }
+          }
+
           const localProfiles = {
             [currentUser.email]: { photo_url: currentUser.photoURL || null, display_name: currentUser.displayName || currentUser.email.split('@')[0] },
             [friend.friend_email]: { photo_url: friendPresence?.photo_url || null, display_name: friendPresence?.display_name || friend.friend_email.split('@')[0] }
@@ -247,7 +255,7 @@ export default function ChatWindow({ friend, currentUser, onBack }) {
           return (
             <MessageBubble 
               key={m.id} 
-              message={m} 
+              message={msgObj} 
               isMe={isMe} 
               onReact={handleReact}
               onUnsend={handleUnsend}

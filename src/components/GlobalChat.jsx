@@ -238,10 +238,18 @@ export default function GlobalChat({ open, onClose, currentUser }) {
             const isLast = nextMsg?.sender_email !== m.sender_email;
             const showAvatar = !isMe && isLast;
 
+            let msgObj = m;
+            if (msgObj.replyTo && !msgObj.replyTo.sender_email) {
+              const orig = messages.find(x => x.id === msgObj.replyTo.id);
+              if (orig) {
+                msgObj = { ...m, replyTo: { ...m.replyTo, sender_email: orig.sender_email } };
+              }
+            }
+
             return (
               <MessageBubble
                 key={m.id}
-                message={m}
+                message={msgObj}
                 isMe={isMe}
                 senderName={!isMe ? name : undefined}
                 showAvatar={showAvatar}
