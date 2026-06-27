@@ -1,8 +1,8 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { Music, Plus, Loader2, Link2, Upload, Trash2, Pause, Play } from 'lucide-react';
+import { Music, Plus, Loader2, Link2, Upload, Trash2, Pause, Play, Users, X, Headphones } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { db, storage } from '../../firebase';
-import { collection, doc, addDoc, deleteDoc } from 'firebase/firestore';
+import { db, storage, auth } from '../../firebase';
+import { collection, doc, addDoc, deleteDoc, setDoc, onSnapshot, query, where, getDocs, serverTimestamp } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -21,7 +21,7 @@ function getYoutubeThumbnail(url) {
 }
 
 /* ── Vinyl Player ──────────────────────────────────── */
-function VinylPlayer({ track, isPlaying, onTogglePlay, iframeRef, audioRef, onIframeLoad }) {
+function VinylPlayer({ track, isPlaying, onTogglePlay, onInvite, iframeRef, audioRef, onIframeLoad, isGuestMode }) {
   const isYoutube = track?.loai === 'link' && getYoutubeEmbed(track?.url);
   const isUpload = track?.loai === 'upload';
 
@@ -125,7 +125,7 @@ function VinylPlayer({ track, isPlaying, onTogglePlay, iframeRef, audioRef, onIf
         {/* Play/Pause button overlay */}
         <button
           onClick={onTogglePlay}
-          disabled={!track}
+          disabled={!track || isGuestMode}
           style={{
             position: 'absolute',
             top: '50%', left: '50%',
@@ -137,16 +137,27 @@ function VinylPlayer({ track, isPlaying, onTogglePlay, iframeRef, audioRef, onIf
             border: '2px solid rgba(255,255,255,0.3)',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             color: 'white',
-            cursor: track ? 'pointer' : 'default',
+            cursor: track && !isGuestMode ? 'pointer' : 'default',
             zIndex: 5,
             transition: 'opacity 0.2s',
             opacity: isPlaying ? 0 : 1,
           }}
-          onMouseEnter={e => e.currentTarget.style.opacity = '1'}
-          onMouseLeave={e => e.currentTarget.style.opacity = isPlaying ? '0' : '1'}
+          onMouseEnter={e => { if(!isGuestMode) e.currentTarget.style.opacity = '1' }}
+          onMouseLeave={e => { if(!isGuestMode) e.currentTarget.style.opacity = isPlaying ? '0' : '1' }}
         >
           {isPlaying ? <Pause size={20} /> : <Play size={20} style={{ marginLeft: 3 }} />}
         </button>
+
+        {/* Rủ bạn bè button */}
+        {track && !isGuestMode && (
+          <button
+            onClick={onInvite}
+            className="absolute bottom-2 right-2 w-10 h-10 rounded-full bg-primary text-white flex items-center justify-center shadow-lg hover:scale-110 transition-transform z-20 border-2 border-background"
+            title="Rủ nghe chung"
+          >
+            <Headphones size={18} />
+          </button>
+        )}
       </div>
 
       {/* Track info */}
@@ -155,12 +166,13 @@ function VinylPlayer({ track, isPlaying, onTogglePlay, iframeRef, audioRef, onIf
           <p className="font-bold text-base truncate max-w-[220px]">{track.ten_bai}</p>
           {track.nghe_si && <p className="text-sm text-muted-foreground">{track.nghe_si}</p>}
           {track.ghi_chu && <p className="text-xs text-muted-foreground italic mt-0.5">"{track.ghi_chu}"</p>}
+          {isGuestMode && <p className="text-[10px] font-semibold text-primary mt-1 animate-pulse">Đang nghe cùng bạn bè...</p>}
         </div>
       ) : (
         <p className="text-sm text-muted-foreground">↓ Chọn bài hát bên dưới</p>
       )}
 
-      {/* Hidden YouTube iframe (stays in DOM for audio continuity) */}
+      {/* Hidden YouTube iframe */}
       {isYoutube && (
         <iframe
           ref={iframeRef}
@@ -172,15 +184,12 @@ function VinylPlayer({ track, isPlaying, onTogglePlay, iframeRef, audioRef, onIf
         />
       )}
 
-      {/* Hidden audio element for uploaded files */}
+      {/* Hidden audio element */}
       {isUpload && track?.url && (
         <audio
           ref={audioRef}
           src={track.url}
           style={{ display: 'none' }}
-          onPlay={() => {}}
-          onPause={() => {}}
-          onEnded={() => {}}
         />
       )}
     </div>
@@ -197,11 +206,138 @@ export default function MusicTab({ tracks, onRefresh }) {
   const [coverFile, setCoverFile] = useState(null);
   const [saving, setSaving] = useState(false);
   const [iframeReady, setIframeReady] = useState(false);
+  
+  // Listen Together states
+  const [friends, setFriends] = useState([]);
+  const [showInviteModal, setShowInviteModal] = useState(false);
+  const [activeSession, setActiveSession] = useState(null); // Host or Guest session details
+  const [incomingInvite, setIncomingInvite] = useState(null);
+
   const fileRef = useRef();
   const coverFileRef = useRef();
   const iframeRef = useRef();
   const audioRef = useRef();
   const prevTrackId = useRef(null);
+  const sessionSyncInterval = useRef();
+
+  const currentUser = auth.currentUser;
+
+  // Load friends for inviting
+  useEffect(() => {
+    if (!currentUser) return;
+    const loadFriends = async () => {
+      const q1 = query(collection(db, 'friends'), where('owner_email', '==', currentUser.email), where('status', '==', 'accepted'));
+      const q2 = query(collection(db, 'friends'), where('friend_email', '==', currentUser.email), where('status', '==', 'accepted'));
+      const [s1, s2] = await Promise.all([getDocs(q1), getDocs(q2)]);
+      const frs = [];
+      s1.forEach(d => frs.push(d.data().friend_email));
+      s2.forEach(d => frs.push(d.data().owner_email));
+      setFriends([...new Set(frs)]);
+    };
+    loadFriends();
+  }, [currentUser]);
+
+  // Lắng nghe incoming invites (Guest Flow)
+  useEffect(() => {
+    if (!currentUser) return;
+    const q = query(
+      collection(db, 'listening_sessions'), 
+      where('participants', 'array-contains', currentUser.email)
+    );
+    const unsub = onSnapshot(q, (snapshot) => {
+      let invite = null;
+      let active = null;
+      snapshot.docs.forEach(doc => {
+        const data = doc.data();
+        // Bỏ qua session do mình tạo
+        if (data.host_email === currentUser.email) return;
+
+        if (data.status === 'inviting') {
+          invite = { id: doc.id, ...data };
+        } else if (data.status === 'active') {
+          active = { id: doc.id, ...data };
+        }
+      });
+
+      if (active) {
+        // Đang là guest trong 1 session
+        setIncomingInvite(null);
+        setActiveSession({ role: 'guest', ...active });
+        // Đồng bộ nhạc theo active session
+        const track = tracks.find(t => t.id === active.track_id) || active.track;
+        if (track && nowPlaying?.id !== track.id) {
+          handleSelectTrack(track, true); // true = isGuest
+        }
+        setIsPlaying(active.is_playing);
+      } else if (invite) {
+        setIncomingInvite(invite);
+      } else {
+        setIncomingInvite(null);
+        if (activeSession?.role === 'guest') {
+          setActiveSession(null);
+          setIsPlaying(false);
+          toast.info("Đã kết thúc phiên nghe chung.");
+        }
+      }
+    });
+    return () => unsub();
+  }, [currentUser, tracks]);
+
+  // Đồng bộ thời gian phát (Host => Guest)
+  useEffect(() => {
+    if (activeSession?.role === 'guest') {
+      const { started_at, position_at_start, is_playing } = activeSession;
+      if (is_playing && started_at) {
+        const startedMs = started_at.toMillis ? started_at.toMillis() : Date.now();
+        const expectedPos = position_at_start + (Date.now() - startedMs) / 1000;
+        
+        // Sync Audio
+        if (audioRef.current && nowPlaying?.loai === 'upload') {
+          const diff = Math.abs(audioRef.current.currentTime - expectedPos);
+          if (diff > 2) {
+            audioRef.current.currentTime = expectedPos;
+          }
+        }
+        
+        // Sync YouTube
+        if (iframeReady && nowPlaying?.loai === 'link') {
+          sendYouTubeCommand('seekTo', [expectedPos, true]);
+        }
+      }
+    }
+  }, [activeSession?.started_at, iframeReady, isPlaying]);
+
+  // Host: Cập nhật vị trí nhạc liên tục cho Session
+  useEffect(() => {
+    if (activeSession?.role === 'host' && isPlaying) {
+      const docId = activeSession.id;
+      const updateHostState = async () => {
+        try {
+          const currentPos = audioRef.current?.currentTime || 0; // fallback to 0 for YT if can't read directly
+          await setDoc(doc(db, 'listening_sessions', docId), {
+            is_playing: true,
+            started_at: serverTimestamp(),
+            position_at_start: currentPos
+          }, { merge: true });
+        } catch (e) {}
+      };
+      updateHostState();
+      sessionSyncInterval.current = setInterval(updateHostState, 5000); // 5s/lần cập nhật
+    } else if (activeSession?.role === 'host' && !isPlaying) {
+      if (sessionSyncInterval.current) clearInterval(sessionSyncInterval.current);
+      const docId = activeSession.id;
+      const currentPos = audioRef.current?.currentTime || 0;
+      setDoc(doc(db, 'listening_sessions', docId), {
+        is_playing: false,
+        position_at_start: currentPos
+      }, { merge: true }).catch(()=>{});
+    }
+
+    return () => {
+      if (sessionSyncInterval.current) clearInterval(sessionSyncInterval.current);
+    };
+  }, [activeSession?.role, isPlaying]);
+
 
   // Stop previous media and start selection instantly
   useEffect(() => {
@@ -226,23 +362,23 @@ export default function MusicTab({ tracks, onRefresh }) {
     }
   }, [isPlaying]);
 
-  // Control YouTube iframe via postMessage (only for pause/resume of already-loaded iframe)
-  const sendYouTubeCommand = useCallback((func) => {
+  // Control YouTube iframe via postMessage
+  const sendYouTubeCommand = useCallback((func, args = []) => {
     try {
       iframeRef.current?.contentWindow?.postMessage(
-        JSON.stringify({ event: 'command', func, args: [] }), '*'
+        JSON.stringify({ event: 'command', func, args }), '*'
       );
     } catch (e) {}
   }, []);
 
-  // When YouTube iframe becomes available and playback is desired,
-  // explicitly send play commands after the iframe is mounted.
   useEffect(() => {
     if (nowPlaying?.loai !== 'link' || !isPlaying || !iframeReady) return;
     sendYouTubeCommand('playVideo');
   }, [nowPlaying?.id, isPlaying, iframeReady, sendYouTubeCommand]);
 
   const handleTogglePlay = useCallback(() => {
+    if (activeSession?.role === 'guest') return; // Guest không được điều khiển
+    
     if (!nowPlaying) return;
     const next = !isPlaying;
     setIsPlaying(next);
@@ -250,10 +386,14 @@ export default function MusicTab({ tracks, onRefresh }) {
     if (nowPlaying.loai === 'link' && iframeReady) {
       sendYouTubeCommand(next ? 'playVideo' : 'pauseVideo');
     }
-  }, [isPlaying, nowPlaying, iframeReady, sendYouTubeCommand]);
+  }, [isPlaying, nowPlaying, iframeReady, sendYouTubeCommand, activeSession]);
 
-  const handleSelectTrack = useCallback((track) => {
-    // If the same track is selected again, resume playback.
+  const handleSelectTrack = useCallback((track, isGuest = false) => {
+    if (activeSession?.role === 'guest' && !isGuest) {
+      toast.warning("Bạn đang nghe chung, không thể tự đổi bài.");
+      return;
+    }
+
     if (nowPlaying?.id === track.id) {
       setIsPlaying(true);
       if (track.loai === 'link') {
@@ -262,7 +402,6 @@ export default function MusicTab({ tracks, onRefresh }) {
       return;
     }
 
-    // Stop current track first
     if (nowPlaying) {
       if (nowPlaying.loai === 'link') {
         sendYouTubeCommand('stopVideo');
@@ -276,7 +415,75 @@ export default function MusicTab({ tracks, onRefresh }) {
     setIframeReady(false);
     setNowPlaying(track);
     setIsPlaying(true);
-  }, [nowPlaying, sendYouTubeCommand]);
+
+    if (activeSession?.role === 'host' && !isGuest) {
+      setDoc(doc(db, 'listening_sessions', activeSession.id), {
+        track_id: track.id,
+        track: track,
+        is_playing: true,
+        started_at: serverTimestamp(),
+        position_at_start: 0
+      }, { merge: true });
+    }
+  }, [nowPlaying, sendYouTubeCommand, activeSession]);
+
+  /* --- Listen Together Host Handlers --- */
+  const handleInviteFriend = async (friendEmail) => {
+    if (!nowPlaying) return;
+    const docId = [currentUser.email, friendEmail].sort().join('_');
+    try {
+      await setDoc(doc(db, 'listening_sessions', docId), {
+        host_email: currentUser.email,
+        host_name: currentUser.displayName?.split(' ')[0] || 'Bạn bè',
+        participant_email: friendEmail,
+        participants: [currentUser.email, friendEmail],
+        status: 'inviting',
+        track_id: nowPlaying.id,
+        track: nowPlaying,
+        is_playing: isPlaying,
+        position_at_start: audioRef.current?.currentTime || 0,
+        started_at: serverTimestamp(),
+        updated_at: serverTimestamp()
+      });
+      setShowInviteModal(false);
+      setActiveSession({ role: 'host', id: docId, participant: friendEmail });
+      toast.success("Đã gửi lời mời nghe chung! 🎧");
+    } catch (e) {
+      console.error(e);
+      toast.error("Không thể gửi lời mời.");
+    }
+  };
+
+  const handleStopSession = async () => {
+    if (activeSession) {
+      await setDoc(doc(db, 'listening_sessions', activeSession.id), { status: 'ended' }, { merge: true });
+      setActiveSession(null);
+      toast.info("Đã dừng nghe chung.");
+    }
+  };
+
+  /* --- Listen Together Guest Handlers --- */
+  const handleAcceptInvite = async () => {
+    if (!incomingInvite) return;
+    try {
+      await setDoc(doc(db, 'listening_sessions', incomingInvite.id), {
+        status: 'active'
+      }, { merge: true });
+      toast.success("Đã tham gia nghe chung! 🎶");
+    } catch (e) {
+      toast.error("Lỗi tham gia.");
+    }
+  };
+
+  const handleDeclineInvite = async () => {
+    if (!incomingInvite) return;
+    try {
+      await setDoc(doc(db, 'listening_sessions', incomingInvite.id), {
+        status: 'declined'
+      }, { merge: true });
+      setIncomingInvite(null);
+    } catch (e) {}
+  };
 
   const handleSave = async () => {
     if (!form.ten_bai) return;
@@ -346,7 +553,6 @@ export default function MusicTab({ tracks, onRefresh }) {
 
   return (
     <>
-      {/* Inline CSS for vinyl spin */}
       <style>{`
         @keyframes vinyl-spin {
           from { transform: rotate(0deg); }
@@ -354,15 +560,52 @@ export default function MusicTab({ tracks, onRefresh }) {
         }
       `}</style>
 
+      {/* Guest Invite Banner */}
+      <AnimatePresence>
+        {incomingInvite && (
+          <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }}
+            className="mb-4 mx-2">
+            <div className="liquid-glass border-primary/40 p-4 rounded-2xl shadow-xl flex flex-col gap-3">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-full bg-primary/20 flex items-center justify-center animate-pulse">
+                  <Headphones size={20} className="text-primary" />
+                </div>
+                <div>
+                  <p className="font-semibold text-sm">Lời mời nghe chung 🎧</p>
+                  <p className="text-xs text-muted-foreground"><span className="font-medium text-foreground">{incomingInvite.host_name}</span> muốn rủ bạn cùng nghe bài {incomingInvite.track?.ten_bai}</p>
+                </div>
+              </div>
+              <div className="flex gap-2">
+                <Button onClick={handleAcceptInvite} className="flex-1 gradient-primary text-white h-9 rounded-xl text-sm">Tham gia ngay</Button>
+                <Button onClick={handleDeclineInvite} variant="ghost" className="flex-1 h-9 rounded-xl text-sm bg-white/5 hover:bg-white/10 text-muted-foreground">Bỏ qua</Button>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       <div className="space-y-4">
-        {/* Vinyl Player — always visible at top */}
+        {/* Active Session Host Banner */}
+        {activeSession?.role === 'host' && (
+          <div className="mx-2 mb-2 px-3 py-2 liquid-glass-sm rounded-xl flex items-center justify-between border border-primary/20 bg-primary/5">
+            <div className="flex items-center gap-2">
+              <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+              <p className="text-xs font-medium">Đang phát cho: <span className="text-primary">{activeSession.participant.split('@')[0]}</span></p>
+            </div>
+            <button onClick={handleStopSession} className="text-[10px] uppercase font-bold text-destructive px-2 py-1 bg-destructive/10 rounded-lg hover:bg-destructive/20">Dừng</button>
+          </div>
+        )}
+
+        {/* Vinyl Player */}
         <div className="liquid-glass rounded-2xl p-5 flex flex-col items-center relative overflow-visible">
           <VinylPlayer
             track={nowPlaying}
             isPlaying={isPlaying}
             onTogglePlay={handleTogglePlay}
+            onInvite={() => setShowInviteModal(true)}
             iframeRef={iframeRef}
             audioRef={audioRef}
+            isGuestMode={activeSession?.role === 'guest'}
             onIframeLoad={() => {
               setIframeReady(true);
               if (isPlaying) {
@@ -436,7 +679,7 @@ export default function MusicTab({ tracks, onRefresh }) {
                       const selected = e.target.files[0];
                       if (selected) {
                         setCoverFile(selected);
-                        setForm(f => ({ ...f, anh_bia: '' })); // clear manually typed URL to prioritize upload
+                        setForm(f => ({ ...f, anh_bia: '' })); 
                       }
                     }} 
                   />
@@ -452,7 +695,12 @@ export default function MusicTab({ tracks, onRefresh }) {
         </AnimatePresence>
 
         {/* Track list */}
-        <div className="space-y-2">
+        <div className="space-y-2 relative">
+          {activeSession?.role === 'guest' && (
+             <div className="absolute inset-0 z-10 bg-background/50 backdrop-blur-[1px] flex items-center justify-center rounded-2xl">
+                <p className="text-sm font-semibold text-primary liquid-glass px-4 py-2 rounded-xl">Bạn đang ở chế độ Nghe chung 🎧</p>
+             </div>
+          )}
           {tracks.length === 0 ? (
             <div className="text-center py-10 text-muted-foreground">
               <Music size={36} className="mx-auto mb-3 opacity-30" />
@@ -473,7 +721,6 @@ export default function MusicTab({ tracks, onRefresh }) {
                   )}
                   onClick={() => handleSelectTrack(track)}
                 >
-                  {/* Cover art */}
                   <div className="relative flex-shrink-0">
                     <div style={{ width: 44, height: 44, borderRadius: 10, overflow: 'hidden' }}>
                       {track.anh_bia
@@ -511,6 +758,34 @@ export default function MusicTab({ tracks, onRefresh }) {
           )}
         </div>
       </div>
+
+      {/* Invite Modal */}
+      <AnimatePresence>
+        {showInviteModal && (
+          <>
+            <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50" onClick={() => setShowInviteModal(false)} />
+            <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }}
+              className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[90%] max-w-sm liquid-glass-heavy rounded-3xl p-5 z-50 flex flex-col gap-4">
+              <div className="flex justify-between items-center">
+                <h3 className="font-semibold text-lg flex items-center gap-2"><Headphones size={20} className="text-primary"/> Rủ bạn cùng nghe</h3>
+                <button onClick={() => setShowInviteModal(false)} className="p-1 rounded-full hover:bg-white/10"><X size={18}/></button>
+              </div>
+              <div className="space-y-2 max-h-60 overflow-y-auto">
+                {friends.length === 0 ? (
+                  <p className="text-sm text-muted-foreground text-center py-4">Bạn chưa có bạn bè nào.</p>
+                ) : (
+                  friends.map(email => (
+                    <div key={email} className="flex items-center justify-between p-3 rounded-xl bg-white/5 hover:bg-white/10 transition-colors">
+                      <p className="text-sm font-medium truncate flex-1">{email.split('@')[0]}</p>
+                      <Button size="sm" onClick={() => handleInviteFriend(email)} className="h-8 rounded-lg gradient-primary text-xs">Mời</Button>
+                    </div>
+                  ))
+                )}
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
     </>
   );
 }

@@ -10,6 +10,8 @@ export default function ChatWindow({ friend, currentUser, onBack }) {
   const [messages, setMessages] = useState([]);
   const [isFriendTyping, setIsFriendTyping] = useState(false);
   const [replyTo, setReplyTo] = useState(null);
+  const [friendPresence, setFriendPresence] = useState(null);
+  const [now, setNow] = useState(Date.now());
   const bottomRef = useRef();
   const prevMessagesLengthRef = useRef(0);
   
@@ -44,11 +46,22 @@ export default function ChatWindow({ friend, currentUser, onBack }) {
       setIsFriendTyping(!!typingDoc?.isTyping);
     });
 
+    const qPresence = query(collection(db, 'user_profiles'), where('email', '==', friend.friend_email));
+    const unsubPresence = onSnapshot(qPresence, (snapshot) => {
+      setFriendPresence(snapshot.docs[0]?.data() || null);
+    });
+
     return () => {
       unsubscribe();
       unsubTyping();
+      unsubPresence();
     };
   }, [friend.friend_email, currentUser.email, channelId]);
+
+  useEffect(() => {
+    const interval = setInterval(() => setNow(Date.now()), 20000);
+    return () => clearInterval(interval);
+  }, []);
 
   // Mark unread messages as read (Optimized with Batch)
   useEffect(() => {
@@ -149,6 +162,21 @@ export default function ChatWindow({ friend, currentUser, onBack }) {
   };
 
   const displayName = friend.nickname || friend.friend_email.split('@')[0];
+  
+  let isOnline = false;
+  let lastActiveText = "Chat riêng tư";
+  if (friendPresence?.last_active?.toMillis) {
+    const lastActiveMs = friendPresence.last_active.toMillis();
+    const diff = now - lastActiveMs;
+    if (diff < 45000) {
+      isOnline = true;
+    } else {
+      const mins = Math.floor(diff / 60000);
+      if (mins < 60) lastActiveText = `Hoạt động ${mins || 1} phút trước`;
+      else if (mins < 1440) lastActiveText = `Hoạt động ${Math.floor(mins/60)} giờ trước`;
+      else lastActiveText = `Hoạt động ${Math.floor(mins/1440)} ngày trước`;
+    }
+  }
 
   return (
     <div className="flex flex-col h-full">
@@ -157,12 +185,21 @@ export default function ChatWindow({ friend, currentUser, onBack }) {
         <button onClick={onBack} className="p-1 rounded-full hover:bg-secondary transition-colors">
           <ArrowLeft size={16} />
         </button>
-        <div className="w-8 h-8 rounded-full gradient-primary flex items-center justify-center text-white text-sm font-bold">
-          {displayName[0]?.toUpperCase()}
+        <div className="relative w-8 h-8 flex-shrink-0">
+          <div className="w-full h-full rounded-full gradient-primary flex items-center justify-center text-white text-sm font-bold">
+            {displayName[0]?.toUpperCase()}
+          </div>
+          {isOnline && (
+            <div className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-green-500 border-2 border-background rounded-full" />
+          )}
         </div>
-        <div>
-          <p className="font-semibold text-sm">{displayName}</p>
-          <p className="text-[11px] text-muted-foreground">Chat riêng tư</p>
+        <div className="flex-1 min-w-0">
+          <p className="font-semibold text-sm truncate">{displayName}</p>
+          {isOnline ? (
+            <p className="text-[11px] font-medium text-green-500">Đang hoạt động</p>
+          ) : (
+            <p className="text-[11px] text-muted-foreground truncate">{lastActiveText}</p>
+          )}
         </div>
       </div>
 

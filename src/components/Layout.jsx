@@ -6,9 +6,10 @@ import TopBar from '@/components/TopBar';
 import BottomNav from '@/components/BottomNav';
 import GlobalChat from '@/components/GlobalChat';
 import FriendsSidebar from '@/components/friends/FriendsSidebar';
+import ProfileEditorModal from '@/components/profile/ProfileEditorModal';
 import { AnimatePresence } from 'framer-motion';
 import { auth } from '../firebase';
-import { signOut } from 'firebase/auth';
+import { signOut, onAuthStateChanged } from 'firebase/auth';
 import { useToast } from "@/components/ui/use-toast";
 import { registerFCMToken } from "@/hooks/useNotifications";
 
@@ -18,8 +19,19 @@ export default function Layout() {
   const location = useLocation();
   const [chatOpen, setChatOpen] = useState(false);
   const [friendsOpen, setFriendsOpen] = useState(false);
+  const [profileOpen, setProfileOpen] = useState(false);
   const { toast } = useToast();
   const [showNotificationPrompt, setShowNotificationPrompt] = useState(false);
+  
+  // Lắng nghe thay đổi User Auth (Kể cả khi F5) và lưu local state
+  const [localUser, setLocalUser] = useState(auth.currentUser);
+
+  useEffect(() => {
+    const unsub = onAuthStateChanged(auth, (user) => {
+      setLocalUser(user);
+    });
+    return () => unsub();
+  }, []);
 
   useEffect(() => {
     // Chỉ hiển thị nếu trình duyệt hỗ trợ Notification và quyền hiện tại là default
@@ -71,7 +83,7 @@ export default function Layout() {
     }
   };
 
-  const overlayActive = chatOpen || friendsOpen;
+  const overlayActive = chatOpen || friendsOpen || profileOpen;
 
   return (
     <div className={cn(
@@ -111,14 +123,20 @@ export default function Layout() {
           <div className="flex-1" />
 
           {/* --- KHU VỰC AVATAR & ĐĂNG XUẤT MỚI --- */}
-          <img 
-            src={auth.currentUser?.photoURL || "https://via.placeholder.com/40"} 
-            alt="Avatar" 
-            className="w-6 h-6 rounded-full ring-2 ring-white/30"
-          />
-          <span className="font-medium text-foreground text-xs">
-            {auth.currentUser?.displayName?.split(' ')[0] || "Bạn yêu"}
-          </span>
+          <button 
+            onClick={() => setProfileOpen(true)}
+            className="flex items-center gap-1.5 hover:bg-white/10 rounded-full pr-2 transition-colors"
+          >
+            <img 
+              src={localUser?.photoURL || "https://via.placeholder.com/40"} 
+              alt="Avatar" 
+              className="w-6 h-6 rounded-full ring-2 ring-white/30 object-cover"
+            />
+            <span className="font-medium text-foreground text-xs">
+              {localUser?.displayName?.split(' ')[0] || "Bạn yêu"}
+            </span>
+          </button>
+          
           <button 
             onClick={() => signOut(auth)}
             className="ml-1 px-2 py-0.5 liquid-glass-sm text-destructive text-[10px] font-semibold hover:liquid-glow transition-all"
@@ -169,7 +187,7 @@ export default function Layout() {
           <GlobalChat
             open={chatOpen}
             onClose={() => setChatOpen(false)}
-            currentUser={auth.currentUser} 
+            currentUser={localUser} 
           />
         )}
       </AnimatePresence>
@@ -180,7 +198,19 @@ export default function Layout() {
           <FriendsSidebar
             open={friendsOpen}
             onClose={() => setFriendsOpen(false)}
-            currentUser={auth.currentUser}
+            currentUser={localUser}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* Profile Editor */}
+      <AnimatePresence>
+        {profileOpen && (
+          <ProfileEditorModal
+            open={profileOpen}
+            onClose={() => setProfileOpen(false)}
+            currentUser={localUser}
+            onProfileUpdated={setLocalUser}
           />
         )}
       </AnimatePresence>

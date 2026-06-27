@@ -1,6 +1,7 @@
 import React, { createContext, useState, useContext, useEffect } from 'react';
 import { auth } from '../firebase';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
+import { usePresenceHeartbeat } from '../hooks/usePresenceHeartbeat';
 
 const AuthContext = createContext();
 
@@ -10,6 +11,9 @@ export const AuthProvider = ({ children }) => {
   const [isLoadingAuth, setIsLoadingAuth] = useState(true);
   const [authChecked, setAuthChecked] = useState(false);
   const [authError, setAuthError] = useState(null);
+
+  // Kích hoạt heartbeat presence
+  usePresenceHeartbeat(user);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {

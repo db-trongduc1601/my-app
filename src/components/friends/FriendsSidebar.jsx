@@ -38,17 +38,6 @@ export default function FriendsSidebar({ open, onClose, currentUser }) {
     if (!currentUser) return;
 
     try {
-      // Register own profile if not exists
-      const profilesSnapshot = await getDocs(collection(db, 'user_profiles'));
-      const profiles = profilesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      setAllProfiles(profiles);
-      
-      const mine = profiles.find(p => p.email === currentUser.email);
-      if (!mine) {
-        const newProfileRef = await addDoc(collection(db, 'user_profiles'), { email: currentUser.email, friend_code: myCode });
-        setAllProfiles(prev => [...prev, { id: newProfileRef.id, email: currentUser.email, friend_code: myCode }]);
-      }
-
       const myEmail = currentUser.email;
       const ownerQuery = query(collection(db, 'friends'), where('owner_email', '==', myEmail));
       const friendQuery = query(collection(db, 'friends'), where('friend_email', '==', myEmail));
@@ -87,6 +76,31 @@ export default function FriendsSidebar({ open, onClose, currentUser }) {
   useEffect(() => {
     if (open && currentUser) loadData();
   }, [open, currentUser]);
+
+  useEffect(() => {
+    // Real-time listener for profiles (presence)
+    const unsub = onSnapshot(collection(db, 'user_profiles'), async (snapshot) => {
+      const profiles = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      setAllProfiles(profiles);
+      
+      // Auto-register my profile if not exist
+      if (currentUser && currentUser.email) {
+        const mine = profiles.find(p => p.email === currentUser.email);
+        if (!mine) {
+          try {
+            await addDoc(collection(db, 'user_profiles'), { email: currentUser.email, friend_code: myCode });
+          } catch(e) {}
+        }
+      }
+    });
+    return () => unsub();
+  }, [currentUser, myCode]);
+
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => {
+    const interval = setInterval(() => setNow(Date.now()), 20000);
+    return () => clearInterval(interval);
+  }, []);
 
   const handleCopy = () => {
     navigator.clipboard.writeText(myCode);
@@ -399,11 +413,33 @@ export default function FriendsSidebar({ open, onClose, currentUser }) {
                   )}
                   {friends.map(r => {
                     const f = getFriendDisplay(r);
+                    const profile = allProfiles.find(p => p.email === f.email);
+                    
+                    let isOnline = false;
+                    let lastActiveText = "";
+                    if (profile?.last_active?.toMillis) {
+                      const lastActiveMs = profile.last_active.toMillis();
+                      const diff = now - lastActiveMs;
+                      if (diff < 45000) {
+                        isOnline = true;
+                      } else {
+                        const mins = Math.floor(diff / 60000);
+                        if (mins < 60) lastActiveText = `Hoạt động ${mins || 1} phút trước`;
+                        else if (mins < 1440) lastActiveText = `Hoạt động ${Math.floor(mins/60)} giờ trước`;
+                        else lastActiveText = `Hoạt động ${Math.floor(mins/1440)} ngày trước`;
+                      }
+                    }
+
                     return (
                       <div key={r.id} className="liquid-glass liquid-glass-interactive rounded-2xl p-3 space-y-2">
                         <div className="flex items-center gap-3">
-                          <div className="w-9 h-9 rounded-full gradient-primary flex items-center justify-center text-white text-sm font-bold flex-shrink-0">
-                            {f.displayName[0]?.toUpperCase()}
+                          <div className="relative w-9 h-9 flex-shrink-0">
+                            <div className="w-full h-full rounded-full gradient-primary flex items-center justify-center text-white text-sm font-bold">
+                              {f.displayName[0]?.toUpperCase()}
+                            </div>
+                            {isOnline && (
+                              <div className="absolute bottom-0 right-0 w-3 h-3 bg-green-500 border-2 border-background rounded-full" />
+                            )}
                           </div>
                           <div className="flex-1 min-w-0">
                             {editingId === r.id ? (
@@ -416,7 +452,15 @@ export default function FriendsSidebar({ open, onClose, currentUser }) {
                             ) : (
                               <p className="font-medium text-sm truncate">{f.displayName}</p>
                             )}
-                            <p className="text-xs text-muted-foreground truncate">{f.email}</p>
+                            <div className="flex items-center gap-1.5 mt-0.5">
+                              {isOnline ? (
+                                <span className="text-[10px] font-semibold text-green-500">Đang hoạt động</span>
+                              ) : lastActiveText ? (
+                                <span className="text-[10px] text-muted-foreground">{lastActiveText}</span>
+                              ) : (
+                                <span className="text-[10px] text-muted-foreground truncate">{f.email}</span>
+                              )}
+                            </div>
                           </div>
                           <div className="flex gap-1 flex-shrink-0">
                             <button onClick={() => setChatFriend({ ...r, friend_email: f.email, nickname: f.nickname })}
