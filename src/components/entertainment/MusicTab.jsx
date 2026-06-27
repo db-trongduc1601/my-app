@@ -348,11 +348,14 @@ export default function MusicTab({ tracks, onRefresh }) {
     
     if (activeSession) {
       const docId = activeSession.id;
+      console.log("[MusicTab] Guest/Host seeking to:", val);
       setDoc(doc(db, 'listening_sessions', docId), {
         position_at_start: val,
         started_at: serverTimestamp(),
         last_action_by: currentUser.email
-      }, { merge: true }).catch(()=>{});
+      }, { merge: true })
+      .then(() => console.log("[MusicTab] Seek write successful"))
+      .catch(err => console.error("[MusicTab] Seek write failed:", err));
     }
   };
 
@@ -441,14 +444,14 @@ export default function MusicTab({ tracks, onRefresh }) {
         if (data.host_email === currentUser.email) {
           // Là Host
           if (data.status === 'inviting' || data.status === 'active') {
-            activeHost = { role: 'host', id: doc.id, participant: data.participant_email, ...data };
+            activeHost = { role: 'host', id: doc.id, participant: data.participant_email, ...data, receivedAt: Date.now() };
           }
         } else {
           // Là Guest
           if (data.status === 'inviting') {
             invite = { id: doc.id, ...data };
           } else if (data.status === 'active') {
-            activeGuest = { role: 'guest', id: doc.id, ...data };
+            activeGuest = { role: 'guest', id: doc.id, ...data, receivedAt: Date.now() };
           }
         }
       });
@@ -462,7 +465,6 @@ export default function MusicTab({ tracks, onRefresh }) {
         if (track && prevTrackId.current !== track.id) {
           handleSelectTrack(track, true); // true = isGuest
         }
-        setIsPlaying(activeGuest.is_playing);
       } else if (activeHost) {
         setActiveSession(activeHost);
       } else {
@@ -490,8 +492,13 @@ export default function MusicTab({ tracks, onRefresh }) {
   useEffect(() => {
     if (!activeSession) return;
     
+    console.log("[MusicTab] Sync effect triggered. Remote session:", activeSession);
+    
     // Bỏ qua nếu hành động cuối cùng do chính mình thực hiện để tránh phản hồi lặp
-    if (activeSession.last_action_by === currentUser.email) return;
+    if (activeSession.last_action_by === currentUser.email) {
+      console.log("[MusicTab] Skipping sync: last action was by me");
+      return;
+    }
 
     const { started_at, position_at_start, is_playing, track_id, track } = activeSession;
     
@@ -499,12 +506,14 @@ export default function MusicTab({ tracks, onRefresh }) {
     if (track_id && nowPlaying?.id !== track_id) {
       const targetTrack = tracks.find(t => t.id === track_id) || track;
       if (targetTrack) {
+        console.log("[MusicTab] Syncing track to:", targetTrack.ten_bai);
         handleSelectTrack(targetTrack, true);
       }
     }
 
     // Đồng bộ Trạng thái Phát/Tạm dừng
     if (is_playing !== undefined && is_playing !== isPlaying) {
+      console.log("[MusicTab] Syncing play state to:", is_playing);
       setIsPlaying(is_playing);
       if (is_playing) {
         if (nowPlaying?.loai === 'upload' && audioRef.current) {
@@ -522,13 +531,13 @@ export default function MusicTab({ tracks, onRefresh }) {
     }
 
     // Đồng bộ Vị trí phát (Seek)
-    if (is_playing && started_at) {
-      const startedMs = started_at.toMillis ? started_at.toMillis() : Date.now();
-      const expectedPos = position_at_start + (Date.now() - startedMs) / 1000;
+    if (is_playing && activeSession.receivedAt) {
+      const expectedPos = position_at_start + (Date.now() - activeSession.receivedAt) / 1000;
 
       // Sync Audio
       if (audioRef.current && nowPlaying?.loai === 'upload') {
         const diff = Math.abs(audioRef.current.currentTime - expectedPos);
+        console.log("[MusicTab] Audio position diff:", diff);
         if (diff > 2.5) {
           audioRef.current.currentTime = expectedPos;
         }
@@ -541,6 +550,7 @@ export default function MusicTab({ tracks, onRefresh }) {
           try { currentYtPos = ytPlayerRef.current.getCurrentTime() || 0; } catch (e) {}
         }
         const diff = Math.abs(currentYtPos - expectedPos);
+        console.log("[MusicTab] YouTube position diff:", diff, "expected:", expectedPos, "current:", currentYtPos);
         if (diff > 2.5) {
           sendYouTubeCommand('seekTo', [expectedPos, true]);
         }
@@ -559,6 +569,7 @@ export default function MusicTab({ tracks, onRefresh }) {
           try { currentYtPos = ytPlayerRef.current.getCurrentTime() || 0; } catch (e) {}
         }
         const diff = Math.abs(currentYtPos - position_at_start);
+        console.log("[MusicTab] Paused sync position diff:", diff);
         if (diff > 1.5) {
           sendYouTubeCommand('seekTo', [position_at_start, true]);
         }
@@ -737,12 +748,15 @@ export default function MusicTab({ tracks, onRefresh }) {
     }
 
     if (activeSession) {
+      console.log("[MusicTab] Writing togglePlay state to Firestore:", next);
       setDoc(doc(db, 'listening_sessions', activeSession.id), {
         is_playing: next,
         position_at_start: currentPos,
         started_at: serverTimestamp(),
         last_action_by: currentUser.email
-      }, { merge: true }).catch(()=>{});
+      }, { merge: true })
+      .then(() => console.log("[MusicTab] TogglePlay write successful"))
+      .catch(err => console.error("[MusicTab] TogglePlay write failed:", err));
     }
   }, [isPlaying, nowPlaying, iframeReady, sendYouTubeCommand, activeSession, currentUser.email]);
 
@@ -807,7 +821,7 @@ export default function MusicTab({ tracks, onRefresh }) {
         updated_at: serverTimestamp()
       });
       setShowInviteModal(false);
-      setActiveSession({ role: 'host', id: docId, participant: friendEmail });
+      setActiveSession({ role: 'host', id: docId, participant: friendEmail, receivedAt: Date.now() });
       toast.success("Đã gửi lời mời nghe chung! 🎧");
     } catch (e) {
       console.error(e);
