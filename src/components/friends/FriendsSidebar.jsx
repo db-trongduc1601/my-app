@@ -4,6 +4,7 @@ import { collection, addDoc, doc, updateDoc, deleteDoc, getDocs, getDoc, query, 
 import { X, Copy, Check, UserPlus, Trash2, Loader2, MessageCircle, Pencil, Clock, UserCheck, UserX } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { motion, AnimatePresence } from 'framer-motion';
+import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import ChatWindow from './ChatWindow';
 import { useAuth } from '@/lib/AuthContext';
