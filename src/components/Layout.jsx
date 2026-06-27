@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
-import { Outlet, useLocation, Link } from 'react-router-dom';
-import { Home, MessageCircle, Users } from 'lucide-react';
+import { Outlet, useLocation } from 'react-router-dom';
+import { MessageCircle, Users } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import TopBar from '@/components/TopBar';
 import BottomNav from '@/components/BottomNav';
@@ -41,7 +41,7 @@ export default function Layout() {
         });
         
         // Đăng ký thiết bị nhận thông báo đẩy FCM ngay lập tức
-        registerFCMToken(auth.currentUser);
+        registerFCMToken(auth.currentUser, { suppressToast: false });
         
         // Gửi thử một thông báo test để xác nhận hoạt động
         if ('serviceWorker' in navigator) {

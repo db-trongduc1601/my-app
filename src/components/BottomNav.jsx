@@ -34,9 +34,14 @@ export default function BottomNav() {
   const glassRef = useRef(null);
   const rafRef = useRef(null);
   const gyroGranted = useRef(false);
+  const lastHighlightAt = useRef(0);
 
   // ── Specular highlight updater (throttled via rAF) ──────────────────────
   const setHighlight = useCallback((lx, ly) => {
+    const now = performance.now();
+    if (now - lastHighlightAt.current < 80) return;
+    lastHighlightAt.current = now;
+
     if (rafRef.current) cancelAnimationFrame(rafRef.current);
     rafRef.current = requestAnimationFrame(() => {
       if (glassRef.current) {
@@ -73,11 +78,16 @@ export default function BottomNav() {
   }, [setHighlight]);
 
   useEffect(() => {
+    const isTouchDevice = typeof window !== 'undefined' && (
+      window.matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window
+    );
+
     window.addEventListener('mousemove', handleMouseMove, { passive: true });
     window.addEventListener('touchmove', handleTouchMove, { passive: true });
 
     // Auto-start gyro on Android (no permission API needed there)
-    if (typeof DeviceOrientationEvent !== 'undefined' &&
+    // Disable on touch devices to avoid constant motion updates and jank on phones.
+    if (!isTouchDevice && typeof DeviceOrientationEvent !== 'undefined' &&
         typeof DeviceOrientationEvent.requestPermission !== 'function') {
       window.addEventListener('deviceorientation', handleOrientation, { passive: true });
       gyroGranted.current = true;

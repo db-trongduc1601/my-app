@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { ExternalLink, Gift, Sparkles, Ruler, Plus, X, Loader2, Pencil, Trash2, Check } from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 import { db } from '../../firebase';
 import { collection, doc, addDoc, updateDoc, deleteDoc, increment } from 'firebase/firestore';
 import { Button } from '@/components/ui/button';

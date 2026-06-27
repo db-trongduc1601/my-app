@@ -4,7 +4,7 @@ import { db } from '../../firebase';
 import { doc, updateDoc, deleteDoc } from 'firebase/firestore';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
-import { ShoppingCart, Check, RefreshCw, MapPin, DollarSign, Pencil, Trash2, Loader2, Plus, X, Zap } from 'lucide-react';
+import { ShoppingCart, Check, RefreshCw, MapPin, DollarSign, Pencil, Trash2, Loader2, Plus, X } from 'lucide-react';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';

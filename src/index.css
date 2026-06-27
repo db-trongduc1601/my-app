@@ -342,6 +342,36 @@
   overflow: hidden;
   z-index: 0;
 }
+
+@media (prefers-reduced-motion: reduce) {
+  .mesh-blob,
+  .animate-float,
+  .animate-shimmer,
+  .animate-glow-pulse,
+  .particle {
+    animation: none !important;
+    transition: none !important;
+  }
+}
+
+@media (hover: none) and (pointer: coarse) {
+  .mesh-blob {
+    animation: none !important;
+    transform: none !important;
+  }
+
+  .liquid-glass,
+  .liquid-glass-heavy,
+  .glass-card {
+    backdrop-filter: blur(12px) saturate(1.2);
+    -webkit-backdrop-filter: blur(12px) saturate(1.2);
+  }
+
+  .tabbar-glass {
+    backdrop-filter: blur(16px) saturate(1.4);
+    -webkit-backdrop-filter: blur(16px) saturate(1.4);
+  }
+}
 .mesh-blob {
   position: absolute;
   border-radius: 50%;

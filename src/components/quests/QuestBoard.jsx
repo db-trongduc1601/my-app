@@ -1,5 +1,5 @@
-import { useState, useEffect, useRef } from 'react';
-import { Star, Plus, Loader2, Zap, Pencil, Trash2, Flame } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Plus, Loader2, Zap, Pencil, Trash2, Flame } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { db } from '../../firebase';
 import { collection, doc, addDoc, updateDoc, deleteDoc, getDocs } from 'firebase/firestore';

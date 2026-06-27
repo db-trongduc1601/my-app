@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useLayoutEffect, useCallback } from 'react';
+import { useState, useRef, useLayoutEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { MapPin, Clock, Ticket, RefreshCw, Plus, X, Loader2 } from 'lucide-react';
 import { db } from '../../firebase';
