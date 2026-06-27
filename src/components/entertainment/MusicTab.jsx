@@ -32,13 +32,19 @@ function VinylPlayer({
   onIframeLoad, 
   isGuestMode,
   showUnmuteFallback,
-  onUnmute
+  onUnmute,
+  currentTime,
+  duration,
+  onSliderStart,
+  onSliderChange,
+  onSliderSeek,
+  formatTime
 }) {
   const isYoutube = track?.loai === 'link' && getYoutubeEmbed(track?.url);
   const isUpload = track?.loai === 'upload';
 
   return (
-    <div className="flex flex-col items-center gap-4">
+    <div className="flex flex-col items-center gap-4 w-full">
       {/* Disc */}
       <div className="relative" style={{ width: 200, height: 200 }}>
         {/* Spinning disc */}
@@ -194,13 +200,35 @@ function VinylPlayer({
         )}
       </div>
 
-      {/* Track info */}
+      {/* Track info & Progress Bar */}
       {track ? (
-        <div className="text-center">
+        <div className="text-center w-full flex flex-col items-center">
           <p className="font-bold text-base truncate max-w-[220px]">{track.ten_bai}</p>
           {track.nghe_si && <p className="text-sm text-muted-foreground">{track.nghe_si}</p>}
           {track.ghi_chu && <p className="text-xs text-muted-foreground italic mt-0.5">"{track.ghi_chu}"</p>}
           {isGuestMode && <p className="text-[10px] font-semibold text-primary mt-1 animate-pulse">Đang nghe cùng bạn bè...</p>}
+          
+          <div className="w-full max-w-[240px] mt-3 space-y-1">
+            <div className="flex items-center justify-between text-[10px] text-muted-foreground font-medium px-0.5">
+              <span>{formatTime(currentTime)}</span>
+              <span>{formatTime(duration)}</span>
+            </div>
+            <input
+              type="range"
+              min={0}
+              max={duration || 100}
+              value={currentTime}
+              onMouseDown={onSliderStart}
+              onTouchStart={onSliderStart}
+              onChange={onSliderChange}
+              onMouseUp={onSliderSeek}
+              onTouchEnd={onSliderSeek}
+              className="w-full h-1 rounded-lg appearance-none bg-white/10 accent-primary cursor-pointer outline-none focus:outline-none transition-all hover:h-1.5"
+              style={{
+                background: `linear-gradient(to right, #e11d48 0%, #e11d48 ${(currentTime / (duration || 1)) * 100}%, rgba(255,255,255,0.1) ${(currentTime / (duration || 1)) * 100}%, rgba(255,255,255,0.1) 100%)`
+              }}
+            />
+          </div>
         </div>
       ) : (
         <p className="text-sm text-muted-foreground">↓ Chọn bài hát bên dưới</p>
@@ -209,6 +237,7 @@ function VinylPlayer({
       {/* Hidden YouTube iframe */}
       {isYoutube && (
         <iframe
+          key={track.id}
           ref={iframeRef}
           src={getYoutubeEmbed(track.url, true)}
           style={{ position: 'absolute', width: 1, height: 1, opacity: 0, pointerEvents: 'none', top: -9999 }}
@@ -230,6 +259,34 @@ function VinylPlayer({
   );
 }
 
+let ytApiPromise = null;
+function loadYouTubeApi() {
+  if (ytApiPromise) return ytApiPromise;
+  
+  ytApiPromise = new Promise((resolve) => {
+    if (window.YT && window.YT.Player) {
+      resolve();
+      return;
+    }
+    
+    const existingScript = document.querySelector('script[src="https://www.youtube.com/iframe_api"]');
+    if (!existingScript) {
+      const tag = document.createElement('script');
+      tag.src = "https://www.youtube.com/iframe_api";
+      const firstScriptTag = document.getElementsByTagName('script')[0];
+      firstScriptTag.parentNode.insertBefore(tag, firstScriptTag);
+    }
+    
+    const prevReady = window.onYouTubeIframeAPIReady;
+    window.onYouTubeIframeAPIReady = () => {
+      if (prevReady) prevReady();
+      resolve();
+    };
+  });
+  
+  return ytApiPromise;
+}
+
 export default function MusicTab({ tracks, onRefresh }) {
   const [nowPlaying, setNowPlaying] = useState(null);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -241,6 +298,12 @@ export default function MusicTab({ tracks, onRefresh }) {
   const [saving, setSaving] = useState(false);
   const [iframeReady, setIframeReady] = useState(false);
   const [showUnmuteFallback, setShowUnmuteFallback] = useState(false);
+
+  // Time & Seek states
+  const [currentTime, setCurrentTime] = useState(0);
+  const [duration, setDuration] = useState(0);
+  const [isDragging, setIsDragging] = useState(false);
+  const ytPlayerRef = useRef(null);
   
   // Listen Together states
   const [friends, setFriends] = useState([]);
@@ -257,6 +320,82 @@ export default function MusicTab({ tracks, onRefresh }) {
   const sessionSyncInterval = useRef();
 
   const currentUser = auth.currentUser;
+
+  const formatTime = (secs) => {
+    if (isNaN(secs)) return '0:00';
+    const m = Math.floor(secs / 60);
+    const s = Math.floor(secs % 60);
+    return `${m}:${s < 10 ? '0' : ''}${s}`;
+  };
+
+  const handleSliderStart = () => {
+    setIsDragging(true);
+  };
+
+  const handleSliderChange = (e) => {
+    setCurrentTime(parseFloat(e.target.value));
+  };
+
+  const handleSliderSeek = (e) => {
+    const val = parseFloat(e.target.value);
+    setIsDragging(false);
+    
+    if (nowPlaying?.loai === 'upload' && audioRef.current) {
+      audioRef.current.currentTime = val;
+    } else if (nowPlaying?.loai === 'link' && ytPlayerRef.current) {
+      sendYouTubeCommand('seekTo', [val, true]);
+    }
+    
+    if (activeSession?.role === 'host') {
+      const docId = activeSession.id;
+      setDoc(doc(db, 'listening_sessions', docId), {
+        position_at_start: val,
+        started_at: serverTimestamp()
+      }, { merge: true }).catch(()=>{});
+    }
+  };
+
+  // Poll progress
+  useEffect(() => {
+    let timer;
+    if (isPlaying && nowPlaying) {
+      const updateProgress = () => {
+        if (isDragging) return;
+        
+        if (nowPlaying.loai === 'upload' && audioRef.current) {
+          setCurrentTime(audioRef.current.currentTime || 0);
+          setDuration(audioRef.current.duration || 0);
+        } else if (nowPlaying.loai === 'link' && ytPlayerRef.current && typeof ytPlayerRef.current.getCurrentTime === 'function') {
+          try {
+            setCurrentTime(ytPlayerRef.current.getCurrentTime() || 0);
+            setDuration(ytPlayerRef.current.getDuration() || 0);
+          } catch (e) {}
+        }
+      };
+      
+      updateProgress();
+      timer = setInterval(updateProgress, 500);
+    } else {
+      if (nowPlaying) {
+        if (nowPlaying.loai === 'upload' && audioRef.current) {
+          setCurrentTime(audioRef.current.currentTime || 0);
+          setDuration(audioRef.current.duration || 0);
+        } else if (nowPlaying.loai === 'link' && ytPlayerRef.current && typeof ytPlayerRef.current.getCurrentTime === 'function') {
+          try {
+            setCurrentTime(ytPlayerRef.current.getCurrentTime() || 0);
+            setDuration(ytPlayerRef.current.getDuration() || 0);
+          } catch (e) {}
+        }
+      }
+    }
+    return () => clearInterval(timer);
+  }, [isPlaying, nowPlaying, isDragging]);
+
+  // Reset progress on track change
+  useEffect(() => {
+    setCurrentTime(0);
+    setDuration(0);
+  }, [nowPlaying?.id]);
 
   // Load friends for inviting
   useEffect(() => {
@@ -406,7 +545,9 @@ export default function MusicTab({ tracks, onRefresh }) {
       const docId = activeSession.id;
       const updateHostState = async () => {
         try {
-          const currentPos = audioRef.current?.currentTime || 0; // fallback to 0 for YT if can't read directly
+          const currentPos = nowPlaying?.loai === 'link' && ytPlayerRef.current && typeof ytPlayerRef.current.getCurrentTime === 'function'
+            ? ytPlayerRef.current.getCurrentTime() || 0
+            : (audioRef.current?.currentTime || 0);
           await setDoc(doc(db, 'listening_sessions', docId), {
             is_playing: true,
             started_at: serverTimestamp(),
@@ -419,7 +560,9 @@ export default function MusicTab({ tracks, onRefresh }) {
     } else if (activeSession?.role === 'host' && !isPlaying) {
       if (sessionSyncInterval.current) clearInterval(sessionSyncInterval.current);
       const docId = activeSession.id;
-      const currentPos = audioRef.current?.currentTime || 0;
+      const currentPos = nowPlaying?.loai === 'link' && ytPlayerRef.current && typeof ytPlayerRef.current.getCurrentTime === 'function'
+        ? ytPlayerRef.current.getCurrentTime() || 0
+        : (audioRef.current?.currentTime || 0);
       setDoc(doc(db, 'listening_sessions', docId), {
         is_playing: false,
         position_at_start: currentPos
@@ -429,7 +572,7 @@ export default function MusicTab({ tracks, onRefresh }) {
     return () => {
       if (sessionSyncInterval.current) clearInterval(sessionSyncInterval.current);
     };
-  }, [activeSession?.role, isPlaying]);
+  }, [activeSession?.role, isPlaying, nowPlaying]);
 
 
   // Stop previous media and start selection instantly
@@ -455,19 +598,66 @@ export default function MusicTab({ tracks, onRefresh }) {
     }
   }, [isPlaying]);
 
+  const handleIframeLoad = async () => {
+    try {
+      await loadYouTubeApi();
+      if (!iframeRef.current) return;
+      
+      if (ytPlayerRef.current) {
+        try { ytPlayerRef.current.destroy(); } catch (e) {}
+        ytPlayerRef.current = null;
+      }
+      
+      ytPlayerRef.current = new window.YT.Player(iframeRef.current, {
+        events: {
+          onReady: () => {
+            setIframeReady(true);
+            if (isPlaying) {
+              try { ytPlayerRef.current?.playVideo(); } catch (e) {}
+            }
+          }
+        }
+      });
+    } catch (e) {
+      console.error("Lỗi bind YouTube Player API:", e);
+      setIframeReady(true);
+      if (isPlaying) {
+        sendYouTubeCommand('playVideo');
+      }
+    }
+  };
+
   // Control YouTube iframe via postMessage
   const sendYouTubeCommand = useCallback((func, args = []) => {
     try {
-      iframeRef.current?.contentWindow?.postMessage(
-        JSON.stringify({ event: 'command', func, args }), '*'
-      );
-    } catch (e) {}
+      if (ytPlayerRef.current && typeof ytPlayerRef.current[func] === 'function') {
+        if (func === 'seekTo') {
+          ytPlayerRef.current.seekTo(args[0], args[1]);
+        } else {
+          ytPlayerRef.current[func]();
+        }
+      } else {
+        iframeRef.current?.contentWindow?.postMessage(
+          JSON.stringify({ event: 'command', func, args }), '*'
+        );
+      }
+    } catch (e) {
+      try {
+        iframeRef.current?.contentWindow?.postMessage(
+          JSON.stringify({ event: 'command', func, args }), '*'
+        );
+      } catch (err) {}
+    }
   }, []);
 
   useEffect(() => {
-    if (nowPlaying?.loai !== 'link' || !isPlaying || !iframeReady) return;
-    sendYouTubeCommand('playVideo');
-  }, [nowPlaying?.id, isPlaying, iframeReady, sendYouTubeCommand]);
+    if (nowPlaying?.loai !== 'link' || !iframeReady) return;
+    if (isPlaying) {
+      sendYouTubeCommand('playVideo');
+    } else {
+      sendYouTubeCommand('pauseVideo');
+    }
+  }, [isPlaying, nowPlaying?.id, iframeReady, sendYouTubeCommand]);
 
   const handleTogglePlay = useCallback(() => {
     if (!nowPlaying) return;
@@ -535,7 +725,9 @@ export default function MusicTab({ tracks, onRefresh }) {
         track_id: nowPlaying.id,
         track: nowPlaying,
         is_playing: isPlaying,
-        position_at_start: audioRef.current?.currentTime || 0,
+        position_at_start: nowPlaying?.loai === 'link' && ytPlayerRef.current && typeof ytPlayerRef.current.getCurrentTime === 'function'
+          ? ytPlayerRef.current.getCurrentTime() || 0
+          : (audioRef.current?.currentTime || 0),
         started_at: serverTimestamp(),
         updated_at: serverTimestamp()
       });
@@ -732,13 +924,13 @@ export default function MusicTab({ tracks, onRefresh }) {
             isGuestMode={activeSession?.role === 'guest'}
             showUnmuteFallback={showUnmuteFallback}
             onUnmute={handleGuestUnmute}
-            onIframeLoad={() => {
-              setIframeReady(true);
-              if (isPlaying) {
-                sendYouTubeCommand('playVideo');
-                setTimeout(() => sendYouTubeCommand('playVideo'), 250);
-              }
-            }}
+            onIframeLoad={handleIframeLoad}
+            currentTime={currentTime}
+            duration={duration}
+            onSliderStart={handleSliderStart}
+            onSliderChange={handleSliderChange}
+            onSliderSeek={handleSliderSeek}
+            formatTime={formatTime}
           />
         </div>
 
