@@ -159,7 +159,7 @@ export default function GlobalChat({ open, onClose, currentUser }) {
 
   return (
     <>
-      <div className="absolute inset-0 z-40 bg-black/30 backdrop-blur-md" onClick={onClose} />
+      <div className="absolute inset-0 z-40 bg-black/30 backdrop-blur-[4px]" onClick={onClose} />
       <motion.div
         initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }}
         transition={{ type: 'spring', damping: 25, stiffness: 200 }}

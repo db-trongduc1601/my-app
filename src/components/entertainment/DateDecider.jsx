@@ -1,4 +1,4 @@
-import { useState } from 'react';
+﻿import { useState, useRef, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { MapPin, Clock, Ticket, RefreshCw, Plus, X, Loader2 } from 'lucide-react';
 import { db } from '../../firebase';
@@ -47,6 +47,143 @@ function SpotDetailModal({ spot, open, onClose }) {
         </div>
       </DialogContent>
     </Dialog>
+  );
+}
+
+/* ── Scratch Card Canvas Overlay ─────────────────── */
+function ScratchOverlay({ onRevealed }) {
+  const canvasRef = useRef(null);
+  const isDrawing = useRef(false);
+  const eraseCount = useRef(0);
+  const revealed = useRef(false);
+  const [opacity, setOpacity] = useState(1);
+  const [removed, setRemoved] = useState(false);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    const w = canvas.width;
+    const h = canvas.height;
+
+    // Silver foil gradient
+    const grad = ctx.createLinearGradient(0, 0, w, h);
+    grad.addColorStop(0, '#c0c0c0');
+    grad.addColorStop(0.3, '#e8e8e8');
+    grad.addColorStop(0.5, '#a8a8a8');
+    grad.addColorStop(0.7, '#d4d4d4');
+    grad.addColorStop(1, '#b0b0b0');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, w, h);
+
+    // Hint text
+    ctx.fillStyle = 'rgba(60,60,60,0.7)';
+    ctx.font = 'bold 13px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('🎁 Cào để xem địa điểm', w / 2, h / 2 - 8);
+    ctx.font = '11px sans-serif';
+    ctx.fillStyle = 'rgba(60,60,60,0.5)';
+    ctx.fillText('← cào ngang đây →', w / 2, h / 2 + 12);
+  }, []);
+
+  const erase = useCallback((canvas, clientX, clientY) => {
+    const rect = canvas.getBoundingClientRect();
+    const x = clientX - rect.left;
+    const y = clientY - rect.top;
+    const ctx = canvas.getContext('2d');
+    ctx.globalCompositeOperation = 'destination-out';
+    ctx.beginPath();
+    ctx.arc(x, y, 22, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Sample every 15 strokes for performance
+    eraseCount.current++;
+    if (eraseCount.current % 15 === 0 && !revealed.current) {
+      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      const pixels = imageData.data;
+      let transparent = 0;
+      for (let i = 3; i < pixels.length; i += 4) {
+        if (pixels[i] < 128) transparent++;
+      }
+      const total = pixels.length / 4;
+      const pct = transparent / total;
+      if (pct > 0.57) {
+        revealed.current = true;
+        // Fade out the canvas
+        setOpacity(0);
+        setTimeout(() => {
+          setRemoved(true);
+          onRevealed?.();
+        }, 500);
+      }
+    }
+  }, [onRevealed]);
+
+  const onPointerDown = (e) => {
+    isDrawing.current = true;
+    erase(canvasRef.current, e.clientX, e.clientY);
+    canvasRef.current.setPointerCapture(e.pointerId);
+  };
+  const onPointerMove = (e) => {
+    if (!isDrawing.current) return;
+    erase(canvasRef.current, e.clientX, e.clientY);
+  };
+  const onPointerUp = () => { isDrawing.current = false; };
+
+  if (removed) return null;
+
+  return (
+    <canvas
+      ref={canvasRef}
+      width={320}
+      height={90}
+      onPointerDown={onPointerDown}
+      onPointerMove={onPointerMove}
+      onPointerUp={onPointerUp}
+      style={{
+        position: 'absolute', inset: 0,
+        width: '100%', height: '100%',
+        borderRadius: '1rem',
+        cursor: 'crosshair',
+        touchAction: 'none',
+        opacity,
+        transition: 'opacity 0.5s ease',
+        zIndex: 10,
+      }}
+    />
+  );
+}
+
+/* ── Scratch Card Wrapper ─────────────────────────── */
+function ScratchCard({ spot, onClick }) {
+  const [revealed, setRevealed] = useState(false);
+  return (
+    <motion.div
+      layout
+      initial={{ opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, scale: 0.95 }}
+      className="liquid-glass rounded-2xl p-3 flex gap-3 items-center cursor-pointer relative overflow-hidden"
+      onClick={revealed ? onClick : undefined}
+    >
+      {/* Revealed content underneath */}
+      {spot.anh
+        ? <img src={spot.anh} alt={spot.ten_dia_diem} className="w-14 h-14 rounded-xl object-cover flex-shrink-0" />
+        : <div className="w-14 h-14 rounded-xl gradient-rose flex items-center justify-center flex-shrink-0 text-2xl">🏞️</div>
+      }
+      <div className="flex-1 min-w-0">
+        <p className="font-semibold text-sm truncate">{spot.ten_dia_diem}</p>
+        {spot.dia_chi && <p className="text-xs text-muted-foreground mt-0.5 truncate"><MapPin size={10} className="inline mr-1"/>{spot.dia_chi}</p>}
+        <div className="flex gap-1.5 mt-1 flex-wrap">
+          <span className="text-xs px-2 py-0.5 rounded-full liquid-glass-sm">{spot.khong_gian}</span>
+          <span className="text-xs px-2 py-0.5 rounded-full liquid-glass-sm">{spot.nang_luong}</span>
+        </div>
+        {revealed && <p className="text-[10px] text-primary font-medium mt-1">👆 Nhấn để xem chi tiết</p>}
+      </div>
+
+      {/* Canvas overlay — sits on top */}
+      {!revealed && <ScratchOverlay onRevealed={() => setRevealed(true)} />}
+    </motion.div>
   );
 }
 
@@ -162,8 +299,8 @@ export default function DateDecider({ spots, onRefresh }) {
         </button>
       )}
 
-      <div className="space-y-2">
-        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-widest">{filtered.length} địa điểm</p>
+      <div className="space-y-3">
+        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-widest">{filtered.length} địa điểm — cào để khám phá! 🎁</p>
         <AnimatePresence mode="popLayout">
           {filtered.length === 0 ? (
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-center py-8 text-muted-foreground">
@@ -171,22 +308,7 @@ export default function DateDecider({ spots, onRefresh }) {
               <p className="text-sm">Không tìm thấy địa điểm phù hợp</p>
             </motion.div>
           ) : filtered.map(spot => (
-            <motion.div key={spot.id} layout initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95 }}
-              className="liquid-glass liquid-glass-interactive rounded-2xl p-3 flex gap-3 items-center cursor-pointer"
-              onClick={() => setSelected(spot)}>
-              {spot.anh
-                ? <img src={spot.anh} alt={spot.ten_dia_diem} className="w-14 h-14 rounded-xl object-cover flex-shrink-0" />
-                : <div className="w-14 h-14 rounded-xl gradient-rose flex items-center justify-center flex-shrink-0 text-2xl">🏞️</div>
-              }
-              <div className="flex-1 min-w-0">
-                <p className="font-semibold text-sm truncate">{spot.ten_dia_diem}</p>
-                {spot.dia_chi && <p className="text-xs text-muted-foreground mt-0.5 truncate"><MapPin size={10} className="inline mr-1"/>{spot.dia_chi}</p>}
-                <div className="flex gap-1.5 mt-1 flex-wrap">
-                  <span className="text-xs px-2 py-0.5 rounded-full liquid-glass-sm">{spot.khong_gian}</span>
-                  <span className="text-xs px-2 py-0.5 rounded-full liquid-glass-sm">{spot.nang_luong}</span>
-                </div>
-              </div>
-            </motion.div>
+            <ScratchCard key={spot.id} spot={spot} onClick={() => setSelected(spot)} />
           ))}
         </AnimatePresence>
       </div>

@@ -201,7 +201,7 @@ export default function FriendsSidebar({ open, onClose, currentUser }) {
 
   return (
     <>
-      <div className="absolute inset-0 z-40 bg-black/30 backdrop-blur-md" onClick={onClose} />
+      <div className="absolute inset-0 z-40 bg-black/30 backdrop-blur-[4px]" onClick={onClose} />
       <motion.div
         initial={{ x: '-100%' }} animate={{ x: 0 }} exit={{ x: '-100%' }}
         transition={{ type: 'spring', damping: 25, stiffness: 200 }}

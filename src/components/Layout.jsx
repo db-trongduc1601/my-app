@@ -71,8 +71,13 @@ export default function Layout() {
     }
   };
 
+  const overlayActive = chatOpen || friendsOpen;
+
   return (
-    <div className="h-[100dvh] bg-background flex flex-col max-w-md mx-auto relative overflow-hidden shadow-2xl pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]">
+    <div className={cn(
+      "h-[100dvh] bg-background flex flex-col max-w-md mx-auto relative overflow-hidden shadow-2xl pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]",
+      overlayActive && "overlay-open"
+    )}>
       {/* Background blobs */}
       <div className="mesh-bg">
         <div className="mesh-blob mesh-blob-1" />

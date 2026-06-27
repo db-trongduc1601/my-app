@@ -93,6 +93,7 @@ export default function BottomNav() {
 
   // ── iOS permission tap handler ──────────────────────────────────────────
   const requestGyro = useCallback(async () => {
+    if (gyroGranted.current) return;
     if (typeof DeviceOrientationEvent?.requestPermission !== 'function') return;
     try {
       const result = await DeviceOrientationEvent.requestPermission();

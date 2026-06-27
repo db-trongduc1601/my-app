@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Star, Plus, Loader2, Zap, Pencil, Trash2, Flame } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { db } from '../../firebase';
@@ -38,7 +38,118 @@ function QuestFormDialog({ initial, onSave, onClose }) {
   );
 }
 
+/* ── Wood Stamp Button ────────────────────────────── */
+function WoodStamp({ onStamp, isCompleted, disabled }) {
+  return (
+    <motion.button
+      onClick={onStamp}
+      disabled={disabled}
+      whileTap={!isCompleted && !disabled ? {
+        scale: 0.75,
+        y: 4,
+        transition: { duration: 0.1, ease: 'easeIn' }
+      } : {}}
+      className="flex-shrink-0 relative"
+      style={{ width: 36, height: 36 }}
+      aria-label={isCompleted ? 'Bỏ đánh dấu' : 'Đóng dấu hoàn thành'}
+    >
+      {/* Wood handle */}
+      <div style={{
+        width: 36, height: 36,
+        borderRadius: '50%',
+        background: isCompleted
+          ? 'radial-gradient(circle at 35% 35%, #8B5E3C, #5C3D1E)'
+          : 'radial-gradient(circle at 35% 35%, #C4956A, #8B6544)',
+        border: '2px solid rgba(0,0,0,0.25)',
+        boxShadow: isCompleted
+          ? 'inset 0 2px 4px rgba(255,255,255,0.2), 0 2px 6px rgba(0,0,0,0.4)'
+          : 'inset 0 2px 4px rgba(255,255,255,0.3), 0 3px 8px rgba(0,0,0,0.3)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        cursor: disabled ? 'wait' : 'pointer',
+        position: 'relative',
+        overflow: 'hidden',
+      }}>
+        {/* Wood grain lines */}
+        <div style={{
+          position: 'absolute', inset: 0,
+          backgroundImage: 'repeating-linear-gradient(45deg, transparent, transparent 3px, rgba(0,0,0,0.08) 3px, rgba(0,0,0,0.08) 4px)',
+          borderRadius: '50%',
+        }} />
+        {disabled
+          ? <Loader2 size={14} className="animate-spin text-white/80" style={{ position: 'relative' }} />
+          : <span style={{ fontSize: 16, position: 'relative' }}>{isCompleted ? '✅' : '🪵'}</span>
+        }
+      </div>
+    </motion.button>
+  );
+}
+
+/* ── Ink Stamp Mark ───────────────────────────────── */
+function StampMark({ name }) {
+  if (!name) return null;
+  const displayText = `${name.toUpperCase()} ĐÃ LÀM`;
+  const rotation = -6 + Math.random() * 4; // -6 to -2 deg, stable per render
+  return (
+    <motion.div
+      initial={{ opacity: 0, scale: 1.3 }}
+      animate={{ opacity: 1, scale: 1 }}
+      exit={{ opacity: 0, scale: 0.8 }}
+      transition={{ duration: 0.25 }}
+      style={{
+        transform: `rotate(${rotation}deg)`,
+        border: '2.5px solid rgba(220, 38, 38, 0.75)',
+        borderRadius: '6px',
+        padding: '2px 8px',
+        color: 'rgba(220, 38, 38, 0.85)',
+        fontWeight: 800,
+        fontSize: 9,
+        letterSpacing: '0.08em',
+        pointerEvents: 'none',
+        whiteSpace: 'nowrap',
+        textShadow: '0 0 4px rgba(220,38,38,0.3)',
+        boxShadow: 'inset 0 0 6px rgba(220,38,38,0.15)',
+        flexShrink: 0,
+      }}
+    >
+      {displayText}
+    </motion.div>
+  );
+}
+
 const todayStr = () => new Date().toISOString().slice(0, 10);
+
+// Play a woody thump sound via Web Audio API (lazy, iOS-safe)
+const audioCtxRef = { current: null };
+function playThump() {
+  try {
+    // Create lazily on first call
+    if (!audioCtxRef.current) {
+      audioCtxRef.current = new (window.AudioContext || window.webkitAudioContext)();
+    }
+    const ctx = audioCtxRef.current;
+    // Resume synchronously inside user gesture call stack (iOS Safari requirement)
+    if (ctx.state === 'suspended') {
+      ctx.resume();
+    }
+    const now = ctx.currentTime;
+    // Low-frequency oscillator burst → woody thump
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(120, now);
+    osc.frequency.exponentialRampToValueAtTime(40, now + 0.1);
+    gain.gain.setValueAtTime(0.6, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.12);
+    osc.start(now);
+    osc.stop(now + 0.12);
+  } catch (e) {
+    // Fail silently — audio is enhancement only
+  }
+}
 
 export default function QuestBoard({ quests, onUpdate, currentUser }) {
   const [showForm, setShowForm] = useState(false);
@@ -47,6 +158,7 @@ export default function QuestBoard({ quests, onUpdate, currentUser }) {
   const [deleting, setDeleting] = useState(null);
   const [streak, setStreak] = useState(0);
   const [streakRecord, setStreakRecord] = useState(null);
+  const [shakingId, setShakingId] = useState(null);
 
   const totalExp = quests.filter(q => q.da_xong).reduce((s, q) => s + (q.diem_exp || 0), 0);
   const maxExp = quests.reduce((s, q) => s + (q.diem_exp || 0), 0);
@@ -75,16 +187,26 @@ export default function QuestBoard({ quests, onUpdate, currentUser }) {
   const handleToggle = async (quest) => {
     setToggling(quest.id);
     const completing = !quest.da_xong;
+    const completedBy = completing ? (currentUser?.displayName || currentUser?.email || 'Bạn') : null;
     try {
-      await updateDoc(doc(db, 'quests', quest.id), { da_xong: completing });
+      // Update with nguoi_hoan_thanh field (null when un-toggling)
+      await updateDoc(doc(db, 'quests', quest.id), {
+        da_xong: completing,
+        nguoi_hoan_thanh: completedBy,
+      });
 
       if (completing) {
+        // Play stamp sound
+        playThump();
+        // Trigger shake
+        setShakingId(quest.id);
+        setTimeout(() => setShakingId(null), 400);
+
         toast.success(`⭐ +${quest.diem_exp} EXP!`);
         // Anti-cheat: only add streak once per day
         const today = todayStr();
         if (streakRecord) {
           if (streakRecord.last_claimed_date !== today) {
-            // New day — increment streak
             const newStreak = (streakRecord.streak_count || 0) + 1;
             await updateDoc(doc(db, 'streak_data', streakRecord.id), {
               streak_count: newStreak,
@@ -94,9 +216,7 @@ export default function QuestBoard({ quests, onUpdate, currentUser }) {
             setStreakRecord(prev => ({ ...prev, streak_count: newStreak, last_claimed_date: today }));
             toast.success(`🔥 Streak ${newStreak} ngày!`);
           }
-          // else: already claimed today, no change
         } else if (currentUser) {
-          // First ever streak
           const docRef = await addDoc(collection(db, 'streak_data'), {
             user_email: currentUser.email,
             streak_count: 1,
@@ -117,14 +237,13 @@ export default function QuestBoard({ quests, onUpdate, currentUser }) {
       console.error(error);
       toast.error('Lỗi khi cập nhật trạng thái nhiệm vụ!');
     }
-
     setToggling(null);
     onUpdate?.();
   };
 
   const handleAdd = async (formData) => {
     try {
-      await addDoc(collection(db, 'quests'), { ...formData, da_xong: false });
+      await addDoc(collection(db, 'quests'), { ...formData, da_xong: false, nguoi_hoan_thanh: null });
       toast.success('Quest mới!');
     } catch (error) {
       console.error(error);
@@ -194,18 +313,41 @@ export default function QuestBoard({ quests, onUpdate, currentUser }) {
       <div className="space-y-2">
         <AnimatePresence>
           {quests.map(quest => (
-            <motion.div key={quest.id} layout initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-              className={cn("liquid-glass liquid-glass-interactive rounded-2xl p-3 flex items-center gap-3", quest.da_xong && "opacity-60")}>
-              <button onClick={() => handleToggle(quest)} disabled={toggling === quest.id}
-                className={cn("w-6 h-6 rounded-full flex-shrink-0 flex items-center justify-center border-2 transition-all",
-                  quest.da_xong ? "bg-primary border-primary" : "border-border")}>
-                {toggling === quest.id
-                  ? <Loader2 size={12} className="animate-spin text-primary-foreground" />
-                  : quest.da_xong ? <Star size={11} className="text-primary-foreground fill-current" /> : null}
-              </button>
+            <motion.div
+              key={quest.id}
+              layout
+              initial={{ opacity: 0 }}
+              animate={shakingId === quest.id ? {
+                opacity: 1,
+                x: [0, -5, 5, -4, 4, -2, 2, 0],
+                transition: { duration: 0.35 }
+              } : { opacity: 1, x: 0 }}
+              exit={{ opacity: 0 }}
+              className={cn(
+                "liquid-glass liquid-glass-interactive rounded-2xl p-3 flex items-center gap-3",
+                quest.da_xong && "opacity-70"
+              )}
+            >
+              {/* Wood Stamp */}
+              <WoodStamp
+                isCompleted={quest.da_xong}
+                disabled={toggling === quest.id}
+                onStamp={() => handleToggle(quest)}
+              />
+
               <div className="flex-1 min-w-0">
-                <p className={cn("text-sm font-medium truncate", quest.da_xong && "line-through text-muted-foreground")}>{quest.ten_nhiem_vu}</p>
+                <p className={cn("text-sm font-medium truncate", quest.da_xong && "line-through text-muted-foreground")}>
+                  {quest.ten_nhiem_vu}
+                </p>
               </div>
+
+              {/* Ink stamp mark */}
+              <AnimatePresence>
+                {quest.da_xong && quest.nguoi_hoan_thanh && (
+                  <StampMark name={quest.nguoi_hoan_thanh} />
+                )}
+              </AnimatePresence>
+
               <span className={cn("text-xs font-bold px-2 py-1 rounded-lg flex-shrink-0",
                 quest.da_xong ? "bg-primary/10 text-primary" : "liquid-glass-sm text-yellow-700 dark:text-yellow-400")}>
                 +{quest.diem_exp} XP
