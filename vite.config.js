@@ -10,4 +10,24 @@ export default defineConfig({
       "@": path.resolve(process.cwd(), "./src"),
     },
   },
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (id.includes('node_modules')) {
+            if (id.includes('firebase')) {
+              return 'firebase';
+            }
+            if (id.includes('framer-motion')) {
+              return 'framer-motion';
+            }
+            if (id.includes('lucide-react')) {
+              return 'lucide-icons';
+            }
+            return 'vendor';
+          }
+        }
+      }
+    }
+  }
 });

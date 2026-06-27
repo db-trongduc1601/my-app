@@ -92,12 +92,13 @@ export default function FriendsSidebar({ open, onClose, currentUser }) {
   };
 
   const handleSendRequest = async () => {
-    if (!codeInput.trim() || !currentUser) return;
+    if (!codeInput.trim() || !currentUser || adding) return;
     const code = codeInput.trim().toUpperCase();
     if (code === myCode) { toast.error('Không thể kết bạn với chính mình!'); return; }
     const profile = allProfiles.find(p => p.friend_code === code);
     if (!profile) { toast.error('Không tìm thấy người dùng với mã này'); return; }
 
+    setAdding(true);
     try {
       // Check if already friends or pending
       const friendsSnapshot = await getDocs(collection(db, 'friends'));
@@ -108,10 +109,10 @@ export default function FriendsSidebar({ open, onClose, currentUser }) {
       );
       if (exists) {
         toast.error(exists.status === 'accepted' ? 'Đã là bạn bè rồi!' : 'Đã gửi lời mời rồi!');
+        setAdding(false);
         return;
       }
 
-      setAdding(true);
       // Create a pending request entry (owner=me, friend=target, status=pending)
       await addDoc(collection(db, 'friends'), {
         owner_email: currentUser.email,
