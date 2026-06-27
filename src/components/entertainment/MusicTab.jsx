@@ -160,11 +160,19 @@ function VinylPlayer({ track, isPlaying, onTogglePlay, iframeRef, audioRef }) {
       {/* Hidden YouTube iframe (stays in DOM for audio continuity) */}
       {isYoutube && (
         <iframe
+          key={track.id}
           ref={iframeRef}
           src={getYoutubeEmbed(track.url, true)}
           style={{ position: 'absolute', width: 1, height: 1, opacity: 0, pointerEvents: 'none', top: -9999 }}
           allow="autoplay; encrypted-media"
           allowFullScreen
+          onLoad={() => {
+            setIframeReady(true);
+            if (isPlaying) {
+              sendYouTubeCommand('playVideo');
+              setTimeout(() => sendYouTubeCommand('playVideo'), 250);
+            }
+          }}
         />
       )}
 
@@ -192,6 +200,7 @@ export default function MusicTab({ tracks, onRefresh }) {
   const [file, setFile] = useState(null);
   const [coverFile, setCoverFile] = useState(null);
   const [saving, setSaving] = useState(false);
+  const [iframeReady, setIframeReady] = useState(false);
   const fileRef = useRef();
   const coverFileRef = useRef();
   const iframeRef = useRef();
@@ -221,13 +230,6 @@ export default function MusicTab({ tracks, onRefresh }) {
     }
   }, [isPlaying]);
 
-  // When YouTube iframe becomes available and playback is desired,
-  // explicitly send play commands after the iframe is mounted.
-  useEffect(() => {
-    if (nowPlaying?.loai !== 'link' || !isPlaying) return;
-    sendYouTubeCommand('playVideo');
-  }, [nowPlaying?.id, isPlaying, sendYouTubeCommand]);
-
   // Control YouTube iframe via postMessage (only for pause/resume of already-loaded iframe)
   const sendYouTubeCommand = useCallback((func) => {
     try {
@@ -237,15 +239,22 @@ export default function MusicTab({ tracks, onRefresh }) {
     } catch (e) {}
   }, []);
 
+  // When YouTube iframe becomes available and playback is desired,
+  // explicitly send play commands after the iframe is mounted.
+  useEffect(() => {
+    if (nowPlaying?.loai !== 'link' || !isPlaying || !iframeReady) return;
+    sendYouTubeCommand('playVideo');
+  }, [nowPlaying?.id, isPlaying, iframeReady, sendYouTubeCommand]);
+
   const handleTogglePlay = useCallback(() => {
     if (!nowPlaying) return;
     const next = !isPlaying;
     setIsPlaying(next);
 
-    if (nowPlaying.loai === 'link') {
+    if (nowPlaying.loai === 'link' && iframeReady) {
       sendYouTubeCommand(next ? 'playVideo' : 'pauseVideo');
     }
-  }, [isPlaying, nowPlaying, sendYouTubeCommand]);
+  }, [isPlaying, nowPlaying, iframeReady, sendYouTubeCommand]);
 
   const handleSelectTrack = useCallback((track) => {
     // If the same track is selected again, resume playback.
@@ -268,6 +277,7 @@ export default function MusicTab({ tracks, onRefresh }) {
     }
 
     prevTrackId.current = track.id;
+    setIframeReady(false);
     setNowPlaying(track);
     setIsPlaying(true);
   }, [nowPlaying, sendYouTubeCommand]);
