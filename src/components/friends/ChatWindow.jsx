@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { toast } from 'sonner';
 import { db } from '../../firebase';
-import { collection, addDoc, query, onSnapshot, where, or, and, doc, setDoc, updateDoc, FieldPath, writeBatch } from 'firebase/firestore';
+import { collection, addDoc, query, onSnapshot, where, or, and, doc, setDoc, updateDoc, FieldPath, writeBatch, deleteField } from 'firebase/firestore';
 import { ArrowLeft } from 'lucide-react';
 import MessageBubble from '@/components/ui/MessageBubble';
 import ChatInput from '@/components/ui/ChatInput';
@@ -151,10 +151,11 @@ export default function ChatWindow({ friend, currentUser, onBack }) {
     } catch (e) { }
   };
 
-  const handleReact = async (messageId, emoji) => {
+  const handleReact = async (message, emoji) => {
     try {
-      await updateDoc(doc(db, 'messages', messageId), 
-        new FieldPath('reactions', currentUser.email), emoji
+      const isRemoving = message.reactions && message.reactions[currentUser.email] === emoji;
+      await updateDoc(doc(db, 'messages', message.id), 
+        new FieldPath('reactions', currentUser.email), isRemoving ? deleteField() : emoji
       );
     } catch (e) {
       console.error(e);
@@ -172,7 +173,10 @@ export default function ChatWindow({ friend, currentUser, onBack }) {
   };
 
   const handleReply = (msg) => {
-    setReplyTo(msg);
+    setReplyTo({
+      ...msg,
+      resolvedSenderName: msg.sender_email === currentUser?.email ? 'Bạn' : (friend.nickname || friend.friend_email.split('@')[0])
+    });
   };
 
   const displayName = friend.nickname || friendPresence?.display_name || friend.friend_email.split('@')[0];

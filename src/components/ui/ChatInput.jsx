@@ -122,7 +122,7 @@ export default function ChatInput({
       {replyTo && (
         <div className="px-3 py-2 bg-secondary/30 border-t border-border flex items-center justify-between">
           <div className="flex-1 min-w-0 pr-2 border-l-2 border-primary/50 pl-2">
-            <span className="text-[10px] font-semibold opacity-80 block">Đang trả lời {replyTo.senderName}</span>
+            <span className="text-[10px] font-semibold opacity-80 block">Đang trả lời {replyTo.resolvedSenderName || replyTo.senderName}</span>
             <p className="text-xs truncate opacity-90">{replyTo.content}</p>
           </div>
           <button 

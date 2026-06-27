@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { db } from '../firebase';
-import { collection, addDoc, query, where, onSnapshot, doc, setDoc, updateDoc, FieldPath } from 'firebase/firestore';
+import { collection, addDoc, query, where, onSnapshot, doc, setDoc, updateDoc, FieldPath, deleteField } from 'firebase/firestore';
 import { X, MessageCircle } from 'lucide-react';
 import { motion } from 'framer-motion';
 import MessageBubble from '@/components/ui/MessageBubble';
@@ -155,10 +155,11 @@ export default function GlobalChat({ open, onClose, currentUser }) {
     } catch (e) { }
   };
 
-  const handleReact = async (messageId, emoji) => {
+  const handleReact = async (message, emoji) => {
     try {
-      await updateDoc(doc(db, 'messages', messageId), 
-        new FieldPath('reactions', currentUser.email), emoji
+      const isRemoving = message.reactions && message.reactions[currentUser.email] === emoji;
+      await updateDoc(doc(db, 'messages', message.id), 
+        new FieldPath('reactions', currentUser.email), isRemoving ? deleteField() : emoji
       );
     } catch (e) {
       console.error(e);
@@ -176,7 +177,10 @@ export default function GlobalChat({ open, onClose, currentUser }) {
   };
 
   const handleReply = (msg) => {
-    setReplyTo(msg);
+    setReplyTo({
+      ...msg,
+      resolvedSenderName: msg.sender_email === currentUser?.email ? 'Bạn' : getDisplayName(msg.sender_email)
+    });
   };
 
   const typingName = typingUsers.length > 0 ? (typingUsers.length === 1 ? typingUsers[0].name : `${typingUsers.length} người`) : '';

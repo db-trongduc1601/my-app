@@ -28,7 +28,7 @@ const MessageBubbleComponent = ({
   const reactorEmails = message.reactions ? Object.keys(message.reactions) : [];
   const uniqueReactions = message.reactions ? [...new Set(Object.values(message.reactions))] : [];
   const handleReact = (emoji) => {
-    if (onReact) onReact(message.id, emoji);
+    if (onReact) onReact(message, emoji);
     setShowActions(false);
   };
 
