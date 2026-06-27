@@ -1,7 +1,8 @@
 import { useState, useRef } from 'react';
 import { updateProfile } from 'firebase/auth';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { storage } from '../../firebase';
+import { collection, query, where, getDocs, updateDoc, doc } from 'firebase/firestore';
+import { storage, db } from '../../firebase';
 import { toast } from 'sonner';
 import { X, Camera, Loader2 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
@@ -80,6 +81,21 @@ export default function ProfileEditorModal({ open, onClose, currentUser, onProfi
     try {
       await updateProfile(currentUser, changes);
       await currentUser.reload();
+      
+      // Cập nhật tài liệu user_profiles trên Firestore để bạn bè cùng thấy
+      try {
+        const q = query(collection(db, 'user_profiles'), where('email', '==', currentUser.email));
+        const querySnapshot = await getDocs(q);
+        if (!querySnapshot.empty) {
+          const profileDoc = querySnapshot.docs[0];
+          await updateDoc(doc(db, 'user_profiles', profileDoc.id), {
+            display_name: displayName.trim(),
+            photo_url: photoURL
+          });
+        }
+      } catch (dbErr) {
+        console.error("Lỗi cập nhật user_profiles:", dbErr);
+      }
       
       toast.success('Đã lưu thông tin cá nhân! 💖');
       if (onProfileUpdated) {

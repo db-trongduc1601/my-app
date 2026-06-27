@@ -22,7 +22,18 @@ function getYoutubeThumbnail(url) {
 }
 
 /* ── Vinyl Player ──────────────────────────────────── */
-function VinylPlayer({ track, isPlaying, onTogglePlay, onInvite, iframeRef, audioRef, onIframeLoad, isGuestMode }) {
+function VinylPlayer({ 
+  track, 
+  isPlaying, 
+  onTogglePlay, 
+  onInvite, 
+  iframeRef, 
+  audioRef, 
+  onIframeLoad, 
+  isGuestMode,
+  showUnmuteFallback,
+  onUnmute
+}) {
   const isYoutube = track?.loai === 'link' && getYoutubeEmbed(track?.url);
   const isUpload = track?.loai === 'upload';
 
@@ -126,7 +137,7 @@ function VinylPlayer({ track, isPlaying, onTogglePlay, onInvite, iframeRef, audi
         {/* Play/Pause button overlay */}
         <button
           onClick={onTogglePlay}
-          disabled={!track || isGuestMode}
+          disabled={!track}
           style={{
             position: 'absolute',
             top: '50%', left: '50%',
@@ -138,16 +149,38 @@ function VinylPlayer({ track, isPlaying, onTogglePlay, onInvite, iframeRef, audi
             border: '2px solid rgba(255,255,255,0.3)',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             color: 'white',
-            cursor: track && !isGuestMode ? 'pointer' : 'default',
+            cursor: track ? 'pointer' : 'default',
             zIndex: 5,
             transition: 'opacity 0.2s',
             opacity: isPlaying ? 0 : 1,
           }}
-          onMouseEnter={e => { if(!isGuestMode) e.currentTarget.style.opacity = '1' }}
-          onMouseLeave={e => { if(!isGuestMode) e.currentTarget.style.opacity = isPlaying ? '0' : '1' }}
+          onMouseEnter={e => e.currentTarget.style.opacity = '1'}
+          onMouseLeave={e => e.currentTarget.style.opacity = isPlaying ? '0' : '1'}
         >
           {isPlaying ? <Pause size={20} /> : <Play size={20} style={{ marginLeft: 3 }} />}
         </button>
+
+        {/* Fallback "Bấm để nghe" overlay cho Guest khi bị block autoplay */}
+        {showUnmuteFallback && (
+          <button
+            onClick={onUnmute}
+            style={{
+              position: 'absolute',
+              inset: 0,
+              borderRadius: '50%',
+              background: 'rgba(244, 114, 152, 0.95)',
+              display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+              color: 'white',
+              cursor: 'pointer',
+              zIndex: 20,
+              animation: 'pulse-unmute 2s infinite',
+              boxShadow: '0 0 20px rgba(244, 114, 152, 0.6)'
+            }}
+          >
+            <span style={{ fontSize: 24, marginBottom: 4 }}>🔊</span>
+            <span style={{ fontSize: 10, fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Bấm để nghe</span>
+          </button>
+        )}
 
         {/* Rủ bạn bè button */}
         {track && !isGuestMode && (
@@ -207,6 +240,7 @@ export default function MusicTab({ tracks, onRefresh }) {
   const [coverFile, setCoverFile] = useState(null);
   const [saving, setSaving] = useState(false);
   const [iframeReady, setIframeReady] = useState(false);
+  const [showUnmuteFallback, setShowUnmuteFallback] = useState(false);
   
   // Listen Together states
   const [friends, setFriends] = useState([]);
@@ -308,6 +342,41 @@ export default function MusicTab({ tracks, onRefresh }) {
     }
   }, [activeSession?.started_at, iframeReady, isPlaying]);
 
+  // Lắng nghe trạng thái phát để hiện nút Unmute Fallback cho Guest
+  useEffect(() => {
+    if (activeSession?.role !== 'guest' || !isPlaying || !nowPlaying) {
+      setShowUnmuteFallback(false);
+      return;
+    }
+
+    const timer = setTimeout(() => {
+      if (nowPlaying.loai === 'upload') {
+        if (audioRef.current?.paused) {
+          setShowUnmuteFallback(true);
+        }
+      } else {
+        // Luôn hiện nút unblock cho YouTube trên mobile vì không đọc được trạng thái trực tiếp
+        setShowUnmuteFallback(true);
+      }
+    }, 1500);
+
+    return () => clearTimeout(timer);
+  }, [activeSession?.role, isPlaying, nowPlaying?.id]);
+
+  const handleGuestUnmute = () => {
+    if (nowPlaying?.loai === 'upload' && audioRef.current) {
+      audioRef.current.play()
+        .then(() => setShowUnmuteFallback(false))
+        .catch(err => {
+          console.log("Unmute failed:", err);
+        });
+    } else if (nowPlaying?.loai === 'link') {
+      sendYouTubeCommand('playVideo');
+      setTimeout(() => sendYouTubeCommand('playVideo'), 200);
+      setShowUnmuteFallback(false);
+    }
+  };
+
   // Host: Cập nhật vị trí nhạc liên tục cho Session
   useEffect(() => {
     if (activeSession?.role === 'host' && isPlaying) {
@@ -378,16 +447,17 @@ export default function MusicTab({ tracks, onRefresh }) {
   }, [nowPlaying?.id, isPlaying, iframeReady, sendYouTubeCommand]);
 
   const handleTogglePlay = useCallback(() => {
-    if (activeSession?.role === 'guest') return; // Guest không được điều khiển
-    
     if (!nowPlaying) return;
     const next = !isPlaying;
     setIsPlaying(next);
 
-    if (nowPlaying.loai === 'link' && iframeReady) {
+    if (nowPlaying.loai === 'upload' && audioRef.current) {
+      if (next) audioRef.current.play().catch(() => {});
+      else audioRef.current.pause();
+    } else if (nowPlaying.loai === 'link' && iframeReady) {
       sendYouTubeCommand(next ? 'playVideo' : 'pauseVideo');
     }
-  }, [isPlaying, nowPlaying, iframeReady, sendYouTubeCommand, activeSession]);
+  }, [isPlaying, nowPlaying, iframeReady, sendYouTubeCommand]);
 
   const handleSelectTrack = useCallback((track, isGuest = false) => {
     if (activeSession?.role === 'guest' && !isGuest) {
@@ -467,6 +537,16 @@ export default function MusicTab({ tracks, onRefresh }) {
   const handleAcceptInvite = async () => {
     if (!incomingInvite) return;
     try {
+      const track = incomingInvite.track;
+      // Chọn bài hát đồng bộ ngay lập tức để unblock autoplay
+      handleSelectTrack(track, true); // true = isGuest
+      
+      // Nếu là upload track, cố gắng phát ngay lập tức
+      if (track?.loai === 'upload' && audioRef.current) {
+        audioRef.current.src = track.url;
+        audioRef.current.play().catch(() => {});
+      }
+      
       await setDoc(doc(db, 'listening_sessions', incomingInvite.id), {
         status: 'active'
       }, { merge: true });
@@ -559,6 +639,10 @@ export default function MusicTab({ tracks, onRefresh }) {
           from { transform: rotate(0deg); }
           to { transform: rotate(360deg); }
         }
+        @keyframes pulse-unmute {
+          0%, 100% { transform: scale(1); }
+          50% { transform: scale(1.05); }
+        }
       `}</style>
 
       {/* Guest Invite Banner */}
@@ -607,6 +691,8 @@ export default function MusicTab({ tracks, onRefresh }) {
             iframeRef={iframeRef}
             audioRef={audioRef}
             isGuestMode={activeSession?.role === 'guest'}
+            showUnmuteFallback={showUnmuteFallback}
+            onUnmute={handleGuestUnmute}
             onIframeLoad={() => {
               setIframeReady(true);
               if (isPlaying) {

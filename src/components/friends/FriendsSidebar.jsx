@@ -268,9 +268,12 @@ export default function FriendsSidebar({ open, onClose, currentUser }) {
 
   const getFriendDisplay = (record) => {
     const otherEmail = record.owner_email === currentUser?.email ? record.friend_email : record.owner_email;
+    const friendProfile = allProfiles.find(p => p.email === otherEmail);
+    const fallbackName = otherEmail ? otherEmail.split('@')[0] : 'Ẩn danh';
     return {
       email: otherEmail,
-      displayName: record.nickname || (otherEmail ? otherEmail.split('@')[0] : 'Ẩn danh'),
+      displayName: record.nickname || friendProfile?.display_name || fallbackName,
+      photoUrl: friendProfile?.photo_url || null,
       id: record.id,
       nickname: record.nickname,
       friend_code: record.friend_code,
@@ -434,9 +437,13 @@ export default function FriendsSidebar({ open, onClose, currentUser }) {
                       <div key={r.id} className="liquid-glass liquid-glass-interactive rounded-2xl p-3 space-y-2">
                         <div className="flex items-center gap-3">
                           <div className="relative w-9 h-9 flex-shrink-0">
-                            <div className="w-full h-full rounded-full gradient-primary flex items-center justify-center text-white text-sm font-bold">
-                              {f.displayName[0]?.toUpperCase()}
-                            </div>
+                            {f.photoUrl ? (
+                              <img src={f.photoUrl} alt={f.displayName} className="w-full h-full rounded-full object-cover border border-white/20" />
+                            ) : (
+                              <div className="w-full h-full rounded-full gradient-primary flex items-center justify-center text-white text-sm font-bold">
+                                {f.displayName[0]?.toUpperCase()}
+                              </div>
+                            )}
                             {isOnline && (
                               <div className="absolute bottom-0 right-0 w-3 h-3 bg-green-500 border-2 border-background rounded-full" />
                             )}

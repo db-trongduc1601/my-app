@@ -161,7 +161,7 @@ export default function ChatWindow({ friend, currentUser, onBack }) {
     setReplyTo(msg);
   };
 
-  const displayName = friend.nickname || friend.friend_email.split('@')[0];
+  const displayName = friend.nickname || friendPresence?.display_name || friend.friend_email.split('@')[0];
   
   let isOnline = false;
   let lastActiveText = "Chat riêng tư";
@@ -186,9 +186,13 @@ export default function ChatWindow({ friend, currentUser, onBack }) {
           <ArrowLeft size={16} />
         </button>
         <div className="relative w-8 h-8 flex-shrink-0">
-          <div className="w-full h-full rounded-full gradient-primary flex items-center justify-center text-white text-sm font-bold">
-            {displayName[0]?.toUpperCase()}
-          </div>
+          {friendPresence?.photo_url ? (
+            <img src={friendPresence.photo_url} alt={displayName} className="w-full h-full rounded-full object-cover border border-white/20" />
+          ) : (
+            <div className="w-full h-full rounded-full gradient-primary flex items-center justify-center text-white text-sm font-bold">
+              {displayName[0]?.toUpperCase()}
+            </div>
+          )}
           {isOnline && (
             <div className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-green-500 border-2 border-background rounded-full" />
           )}
