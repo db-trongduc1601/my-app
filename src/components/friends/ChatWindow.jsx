@@ -129,7 +129,7 @@ export default function ChatWindow({ friend, currentUser, onBack }) {
           type: 'chat',
           senderEmail: currentUser.email,
           senderName: currentUser.displayName || currentUser.email.split('@')[0],
-          receiverEmail: friend.friend_email,
+          receiverEmail: friend.friend_email || friend.email,
           content: textContent
         })
       }).catch(err => console.error("Lỗi gửi thông báo HTTP:", err));

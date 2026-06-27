@@ -11,6 +11,7 @@ export default function GlobalChat({ open, onClose, currentUser }) {
   const [typingUsers, setTypingUsers] = useState([]);
   const [replyTo, setReplyTo] = useState(null);
   const [profiles, setProfiles] = useState({});
+  const [friendNicknames, setFriendNicknames] = useState({});
   const [tick, setTick] = useState(0);
   const bottomRef = useRef();
   const prevMessagesLengthRef = useRef(0);
@@ -53,12 +54,34 @@ export default function GlobalChat({ open, onClose, currentUser }) {
       setProfiles(profs);
     });
 
+    const unsubFriends1 = onSnapshot(query(collection(db, 'friends'), where('owner_email', '==', currentUser?.email || '')), snap => {
+      const f = {};
+      snap.forEach(doc => {
+        if (doc.data().status === 'accepted') {
+          f[doc.data().friend_email] = doc.data().nickname;
+        }
+      });
+      setFriendNicknames(prev => ({ ...prev, ...f }));
+    });
+    
+    const unsubFriends2 = onSnapshot(query(collection(db, 'friends'), where('friend_email', '==', currentUser?.email || '')), snap => {
+      const f = {};
+      snap.forEach(doc => {
+        if (doc.data().status === 'accepted') {
+          f[doc.data().owner_email] = doc.data().nickname;
+        }
+      });
+      setFriendNicknames(prev => ({ ...prev, ...f }));
+    });
+
     return () => {
       unsubscribe();
       unsubTyping();
       unsubProfiles();
+      unsubFriends1();
+      unsubFriends2();
     };
-  }, [open]);
+  }, [open, currentUser]);
 
   useEffect(() => {
     if (!open) return;
@@ -77,7 +100,7 @@ export default function GlobalChat({ open, onClose, currentUser }) {
     }
   };
 
-  const getDisplayName = (email) => profiles[email]?.display_name || email?.split('@')[0] || 'Ẩn danh';
+  const getDisplayName = (email) => friendNicknames[email] || profiles[email]?.display_name || email?.split('@')[0] || 'Ẩn danh';
 
   const handleSend = async (textContent) => {
     if (!currentUser) return;

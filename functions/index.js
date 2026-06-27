@@ -29,14 +29,17 @@ exports.sendNotification = functions.https.onRequest((req, res) => {
       const db = adminInstance.firestore();
       const tokensSnapshot = await db.collection("fcm_tokens").get();
       
+      const lowerSender = (senderEmail || "").toLowerCase().trim();
+      const lowerReceiver = (receiverEmail || "").toLowerCase().trim();
+
       const registrationTokens = [];
       tokensSnapshot.forEach((doc) => {
-        const email = doc.id;
+        const email = doc.id.toLowerCase().trim();
         const data = doc.data();
         
         // Gửi cho người kia (khác email người gửi)
-        if (email !== senderEmail) {
-          if (receiverEmail === "global" || receiverEmail === email) {
+        if (email !== lowerSender) {
+          if (lowerReceiver === "global" || lowerReceiver === email) {
             if (data.token) {
               registrationTokens.push(data.token);
             }
