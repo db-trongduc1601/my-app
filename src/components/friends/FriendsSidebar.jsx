@@ -50,15 +50,19 @@ export default function FriendsSidebar({ open, onClose, currentUser }) {
       }
 
       const myEmail = currentUser.email;
-      const friendsQuery = query(collection(db, 'friends'), where('owner_email', '==', myEmail));
-      const friendsSnapshot = await getDocs(friendsQuery);
-      const allRecords = friendsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      const ownerQuery = query(collection(db, 'friends'), where('owner_email', '==', myEmail));
+      const friendQuery = query(collection(db, 'friends'), where('friend_email', '==', myEmail));
+      const [ownerSnapshot, friendSnapshot] = await Promise.all([
+        getDocs(ownerQuery),
+        getDocs(friendQuery),
+      ]);
+      const allRecords = [
+        ...ownerSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })),
+        ...friendSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })),
+      ];
 
-      // Accepted friends: I am owner or friend_email, status=accepted
-      const accepted = allRecords.filter(r =>
-        r.status === 'accepted' && (r.owner_email === myEmail || r.friend_email === myEmail)
-      );
-      // Deduplicate by pair
+      // Accepted friends: both directions
+      const accepted = allRecords.filter(r => r.status === 'accepted');
       const seen = new Set();
       const deduped = accepted.filter(r => {
         const key = [r.owner_email, r.friend_email].sort().join('|');
@@ -108,7 +112,41 @@ export default function FriendsSidebar({ open, onClose, currentUser }) {
         (r.owner_email === profile.email && r.friend_email === currentUser.email)
       );
       if (exists) {
-        toast.error(exists.status === 'accepted' ? 'Đã là bạn bè rồi!' : 'Đã gửi lời mời rồi!');
+        if (exists.status === 'accepted') {
+          toast.error('Đã là bạn bè rồi!');
+          setAdding(false);
+          return;
+        }
+        if (exists.owner_email === currentUser.email) {
+          toast.error('Đã gửi lời mời rồi!');
+          setAdding(false);
+          return;
+        }
+
+        // Incoming pending request exists from the other user, auto-accept it.
+        await updateDoc(doc(db, 'friends', exists.id), { status: 'accepted' });
+
+        const mirrorQuery = query(
+          collection(db, 'friends'),
+          where('owner_email', '==', currentUser.email),
+          where('friend_email', '==', profile.email),
+          where('status', '==', 'accepted')
+        );
+        const mirrorSnapshot = await getDocs(mirrorQuery);
+        if (mirrorSnapshot.empty) {
+          await addDoc(collection(db, 'friends'), {
+            owner_email: currentUser.email,
+            friend_email: profile.email,
+            friend_code: generateFriendCode(profile.email),
+            nickname: '',
+            status: 'accepted',
+            requester_email: profile.email,
+          });
+        }
+
+        toast.success('✅ Đã chấp nhận lời mời của người kia!');
+        setCodeInput('');
+        loadData();
         setAdding(false);
         return;
       }
@@ -233,7 +271,10 @@ export default function FriendsSidebar({ open, onClose, currentUser }) {
       <motion.div
         initial={{ x: '-100%' }} animate={{ x: 0 }} exit={{ x: '-100%' }}
         transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-        className="absolute top-0 left-0 h-full w-80 max-w-[85%] z-50 liquid-glass-heavy border-r border-border shadow-2xl flex flex-col"
+        className={chatFriend ?
+          'absolute top-16 bottom-0 left-0 right-0 w-full z-50 liquid-glass-heavy rounded-t-3xl border-t border-white/10 shadow-2xl flex flex-col overflow-hidden' :
+          'absolute top-0 left-0 h-full w-80 max-w-[85%] z-50 liquid-glass-heavy border-r border-border shadow-2xl flex flex-col'
+        }
       >
         <AnimatePresence mode="wait">
           {chatFriend ? (

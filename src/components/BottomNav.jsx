@@ -85,8 +85,7 @@ export default function BottomNav() {
     window.addEventListener('mousemove', handleMouseMove, { passive: true });
     window.addEventListener('touchmove', handleTouchMove, { passive: true });
 
-    // Auto-start gyro on Android (no permission API needed there)
-    // Disable on touch devices to avoid constant motion updates and jank on phones.
+    // Disable gyroscope prompts on touch devices to avoid blank-screen issues.
     if (!isTouchDevice && typeof DeviceOrientationEvent !== 'undefined' &&
         typeof DeviceOrientationEvent.requestPermission !== 'function') {
       window.addEventListener('deviceorientation', handleOrientation, { passive: true });
@@ -101,20 +100,10 @@ export default function BottomNav() {
     };
   }, [handleMouseMove, handleTouchMove, handleOrientation]);
 
-  // ── iOS permission tap handler ──────────────────────────────────────────
-  const requestGyro = useCallback(async () => {
-    if (gyroGranted.current) return;
-    if (typeof DeviceOrientationEvent?.requestPermission !== 'function') return;
-    try {
-      const result = await DeviceOrientationEvent.requestPermission();
-      if (result === 'granted') {
-        gyroGranted.current = true;
-        window.addEventListener('deviceorientation', handleOrientation, { passive: true });
-      }
-    } catch {
-      // user denied or API not available — mouse fallback already active
-    }
-  }, [handleOrientation]);
+  // ── iOS permission tap handler (removed)
+  const requestGyro = useCallback(() => {
+    // Permission prompt is removed to avoid blank screen behavior on iOS.
+  }, []);
 
   return (
     /**
@@ -142,7 +131,6 @@ export default function BottomNav() {
       <div
         ref={glassRef}
         className="tabbar-glass"
-        onClick={requestGyro}
         style={{ pointerEvents: 'auto' }}
       >
         {/* Tab items */}
