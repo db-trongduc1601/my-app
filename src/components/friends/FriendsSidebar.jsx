@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { db } from '../../firebase';
-import { collection, addDoc, doc, updateDoc, deleteDoc, getDocs } from 'firebase/firestore';
+import { collection, addDoc, doc, updateDoc, deleteDoc, getDocs, query, where } from 'firebase/firestore';
 import { X, Copy, Check, UserPlus, Trash2, Loader2, MessageCircle, Pencil, Clock, UserCheck, UserX } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -49,10 +49,10 @@ export default function FriendsSidebar({ open, onClose, currentUser }) {
         setAllProfiles(prev => [...prev, { id: newProfileRef.id, email: currentUser.email, friend_code: myCode }]);
       }
 
-      // Load all Friend records where I am involved
-      const friendsSnapshot = await getDocs(collection(db, 'friends'));
-      const allRecords = friendsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       const myEmail = currentUser.email;
+      const friendsQuery = query(collection(db, 'friends'), where('owner_email', '==', myEmail));
+      const friendsSnapshot = await getDocs(friendsQuery);
+      const allRecords = friendsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 
       // Accepted friends: I am owner or friend_email, status=accepted
       const accepted = allRecords.filter(r =>
@@ -165,9 +165,23 @@ export default function FriendsSidebar({ open, onClose, currentUser }) {
     }
   };
 
-  const handleDelete = async (id) => {
+  const removeFriendRecords = async (record) => {
+    const friendEmail = record.owner_email === currentUser.email ? record.friend_email : record.owner_email;
+    const q = query(collection(db, 'friends'), where('owner_email', '==', currentUser.email));
+    const snapshot = await getDocs(q);
+    const records = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+
+    const toDelete = records.filter(r => (
+      (r.owner_email === currentUser.email && r.friend_email === friendEmail) ||
+      (r.owner_email === friendEmail && r.friend_email === currentUser.email)
+    ));
+
+    await Promise.all(toDelete.map(r => deleteDoc(doc(db, 'friends', r.id))));
+  };
+
+  const handleDelete = async (record) => {
     try {
-      await deleteDoc(doc(db, 'friends', id));
+      await removeFriendRecords(record);
       toast.success('Đã xóa bạn');
       loadData();
     } catch (error) {
