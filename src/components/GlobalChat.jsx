@@ -49,7 +49,9 @@ export default function GlobalChat({ open, onClose, currentUser }) {
     const unsubProfiles = onSnapshot(collection(db, 'user_profiles'), (snap) => {
       const profs = {};
       snap.forEach(doc => {
-        profs[doc.data().email] = doc.data();
+        if (doc.data().email) {
+          profs[doc.data().email.toLowerCase()] = doc.data();
+        }
       });
       setProfiles(profs);
     });
@@ -100,7 +102,11 @@ export default function GlobalChat({ open, onClose, currentUser }) {
     }
   };
 
-  const getDisplayName = (email) => friendNicknames[email] || profiles[email]?.display_name || email?.split('@')[0] || 'Ẩn danh';
+  const getDisplayName = (email) => {
+    if (!email) return 'Ẩn danh';
+    const lower = email.toLowerCase();
+    return profiles[lower]?.display_name || friendNicknames[lower] || email.split('@')[0];
+  };
 
   const handleSend = async (textContent) => {
     if (!currentUser) return;
@@ -136,7 +142,10 @@ export default function GlobalChat({ open, onClose, currentUser }) {
           receiverEmail: 'global',
           content: textContent
         })
-      }).catch(err => console.error("Lỗi gửi thông báo HTTP:", err));
+      })
+      .then(r => r.json())
+      .then(data => console.log("sendNotification Global response:", data))
+      .catch(err => console.error("Lỗi gửi thông báo HTTP:", err));
     } catch (error) {
       console.error(error);
     }
@@ -156,10 +165,12 @@ export default function GlobalChat({ open, onClose, currentUser }) {
   };
 
   const handleReact = async (message, emoji) => {
+    if (!currentUser) return;
     try {
-      const isRemoving = message.reactions && message.reactions[currentUser.email] === emoji;
+      const lowerEmail = currentUser.email.toLowerCase();
+      const isRemoving = message.reactions && message.reactions[lowerEmail] === emoji;
       await updateDoc(doc(db, 'messages', message.id), 
-        new FieldPath('reactions', currentUser.email), isRemoving ? deleteField() : emoji
+        new FieldPath('reactions', lowerEmail), isRemoving ? deleteField() : emoji
       );
     } catch (e) {
       console.error(e);

@@ -133,7 +133,10 @@ export default function ChatWindow({ friend, currentUser, onBack }) {
           receiverEmail: friend.friend_email || friend.email,
           content: textContent
         })
-      }).catch(err => console.error("Lỗi gửi thông báo HTTP:", err));
+      })
+      .then(r => r.json())
+      .then(data => console.log("sendNotification response:", data))
+      .catch(err => console.error("Lỗi gửi thông báo HTTP:", err));
     } catch (error) {
       console.error(error);
     }
@@ -153,9 +156,10 @@ export default function ChatWindow({ friend, currentUser, onBack }) {
 
   const handleReact = async (message, emoji) => {
     try {
-      const isRemoving = message.reactions && message.reactions[currentUser.email] === emoji;
+      const lowerEmail = currentUser.email.toLowerCase();
+      const isRemoving = message.reactions && message.reactions[lowerEmail] === emoji;
       await updateDoc(doc(db, 'messages', message.id), 
-        new FieldPath('reactions', currentUser.email), isRemoving ? deleteField() : emoji
+        new FieldPath('reactions', lowerEmail), isRemoving ? deleteField() : emoji
       );
     } catch (e) {
       console.error(e);
@@ -179,7 +183,7 @@ export default function ChatWindow({ friend, currentUser, onBack }) {
     });
   };
 
-  const displayName = friend.nickname || friendPresence?.display_name || friend.friend_email.split('@')[0];
+  const displayName = friendPresence?.display_name || friend.nickname || friend.friend_email.split('@')[0];
   
   let isOnline = false;
   let lastActiveText = "Chat riêng tư";
@@ -245,11 +249,11 @@ export default function ChatWindow({ friend, currentUser, onBack }) {
           }
 
           const localProfiles = {
-            [currentUser.email]: { photo_url: currentUser.photoURL || null, display_name: currentUser.displayName || currentUser.email.split('@')[0] },
-            [friend.friend_email]: { photo_url: friendPresence?.photo_url || null, display_name: friendPresence?.display_name || friend.friend_email.split('@')[0] }
+            [currentUser.email.toLowerCase()]: { photo_url: currentUser.photoURL || null, display_name: currentUser.displayName || currentUser.email.split('@')[0] },
+            [friend.friend_email.toLowerCase()]: { photo_url: friendPresence?.photo_url || null, display_name: friendPresence?.display_name || friend.friend_email.split('@')[0] }
           };
           const localNicknames = {
-            [friend.friend_email]: friend.nickname
+            [friend.friend_email.toLowerCase()]: friend.nickname
           };
 
           return (

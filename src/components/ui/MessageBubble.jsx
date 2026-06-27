@@ -34,12 +34,14 @@ const MessageBubbleComponent = ({
 
   const resolveName = (email) => {
     if (!email) return 'Ẩn danh';
-    if (email === currentUserEmail) return 'Bạn';
-    return friendNicknames[email] || profiles[email]?.display_name || email.split('@')[0];
+    const lower = email.toLowerCase();
+    const lowerMe = currentUserEmail?.toLowerCase();
+    if (lower === lowerMe) return 'Bạn';
+    return profiles[lower]?.display_name || friendNicknames[lower] || email.split('@')[0];
   };
 
   const resolveAvatar = (email) => {
-    return profiles[email]?.photo_url;
+    return profiles[email.toLowerCase()]?.photo_url;
   };
 
   return (

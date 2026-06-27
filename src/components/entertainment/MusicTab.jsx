@@ -346,11 +346,12 @@ export default function MusicTab({ tracks, onRefresh }) {
       sendYouTubeCommand('seekTo', [val, true]);
     }
     
-    if (activeSession?.role === 'host') {
+    if (activeSession) {
       const docId = activeSession.id;
       setDoc(doc(db, 'listening_sessions', docId), {
         position_at_start: val,
-        started_at: serverTimestamp()
+        started_at: serverTimestamp(),
+        last_action_by: currentUser.email
       }, { merge: true }).catch(()=>{});
     }
   };
@@ -414,7 +415,9 @@ export default function MusicTab({ tracks, onRefresh }) {
     const unsubProfiles = onSnapshot(collection(db, 'user_profiles'), (snap) => {
       const profs = {};
       snap.forEach(doc => {
-        profs[doc.data().email] = doc.data().display_name || doc.data().email.split('@')[0];
+        if (doc.data().email) {
+          profs[doc.data().email.toLowerCase()] = doc.data().display_name || doc.data().email.split('@')[0];
+        }
       });
       setProfiles(profs);
     });
@@ -471,6 +474,9 @@ export default function MusicTab({ tracks, onRefresh }) {
             try { iframeRef.current?.contentWindow?.postMessage(JSON.stringify({ event: 'command', func: 'pauseVideo', args: [] }), '*'); } catch (e) {}
             toast.info("Đã kết thúc phiên nghe chung.");
           } else if (prev?.role === 'host') {
+            setIsPlaying(false);
+            if (audioRef.current) audioRef.current.pause();
+            try { iframeRef.current?.contentWindow?.postMessage(JSON.stringify({ event: 'command', func: 'pauseVideo', args: [] }), '*'); } catch (e) {}
             toast.info("Người nghe chung đã rời phòng.");
           }
           return null;
@@ -480,29 +486,94 @@ export default function MusicTab({ tracks, onRefresh }) {
     return () => unsub();
   }, [currentUser, tracks]);
 
-  // Đồng bộ thời gian phát (Host => Guest)
+  // Đồng bộ trạng thái phát giữa Host và Guest (Song hành hai chiều)
   useEffect(() => {
-    if (activeSession?.role === 'guest') {
-      const { started_at, position_at_start, is_playing } = activeSession;
-      if (is_playing && started_at) {
-        const startedMs = started_at.toMillis ? started_at.toMillis() : Date.now();
-        const expectedPos = position_at_start + (Date.now() - startedMs) / 1000;
-        
-        // Sync Audio
-        if (audioRef.current && nowPlaying?.loai === 'upload') {
-          const diff = Math.abs(audioRef.current.currentTime - expectedPos);
-          if (diff > 2) {
-            audioRef.current.currentTime = expectedPos;
-          }
+    if (!activeSession) return;
+    
+    // Bỏ qua nếu hành động cuối cùng do chính mình thực hiện để tránh phản hồi lặp
+    if (activeSession.last_action_by === currentUser.email) return;
+
+    const { started_at, position_at_start, is_playing, track_id, track } = activeSession;
+    
+    // Đồng bộ bài hát
+    if (track_id && nowPlaying?.id !== track_id) {
+      const targetTrack = tracks.find(t => t.id === track_id) || track;
+      if (targetTrack) {
+        handleSelectTrack(targetTrack, true);
+      }
+    }
+
+    // Đồng bộ Trạng thái Phát/Tạm dừng
+    if (is_playing !== undefined && is_playing !== isPlaying) {
+      setIsPlaying(is_playing);
+      if (is_playing) {
+        if (nowPlaying?.loai === 'upload' && audioRef.current) {
+          audioRef.current.play().catch(() => {});
+        } else if (nowPlaying?.loai === 'link' && iframeReady) {
+          sendYouTubeCommand('playVideo');
         }
-        
-        // Sync YouTube
-        if (iframeReady && nowPlaying?.loai === 'link') {
-          sendYouTubeCommand('seekTo', [expectedPos, true]);
+      } else {
+        if (nowPlaying?.loai === 'upload' && audioRef.current) {
+          audioRef.current.pause();
+        } else if (nowPlaying?.loai === 'link' && iframeReady) {
+          sendYouTubeCommand('pauseVideo');
         }
       }
     }
-  }, [activeSession?.started_at, iframeReady, isPlaying]);
+
+    // Đồng bộ Vị trí phát (Seek)
+    if (is_playing && started_at) {
+      const startedMs = started_at.toMillis ? started_at.toMillis() : Date.now();
+      const expectedPos = position_at_start + (Date.now() - startedMs) / 1000;
+
+      // Sync Audio
+      if (audioRef.current && nowPlaying?.loai === 'upload') {
+        const diff = Math.abs(audioRef.current.currentTime - expectedPos);
+        if (diff > 2.5) {
+          audioRef.current.currentTime = expectedPos;
+        }
+      }
+
+      // Sync YouTube
+      if (iframeReady && nowPlaying?.loai === 'link') {
+        let currentYtPos = 0;
+        if (ytPlayerRef.current && typeof ytPlayerRef.current.getCurrentTime === 'function') {
+          try { currentYtPos = ytPlayerRef.current.getCurrentTime() || 0; } catch (e) {}
+        }
+        const diff = Math.abs(currentYtPos - expectedPos);
+        if (diff > 2.5) {
+          sendYouTubeCommand('seekTo', [expectedPos, true]);
+        }
+      }
+    } else if (!is_playing && position_at_start !== undefined) {
+      // Khi tạm dừng, đồng bộ vị trí chính xác
+      if (audioRef.current && nowPlaying?.loai === 'upload') {
+        const diff = Math.abs(audioRef.current.currentTime - position_at_start);
+        if (diff > 1.5) {
+          audioRef.current.currentTime = position_at_start;
+        }
+      }
+      if (iframeReady && nowPlaying?.loai === 'link') {
+        let currentYtPos = 0;
+        if (ytPlayerRef.current && typeof ytPlayerRef.current.getCurrentTime === 'function') {
+          try { currentYtPos = ytPlayerRef.current.getCurrentTime() || 0; } catch (e) {}
+        }
+        const diff = Math.abs(currentYtPos - position_at_start);
+        if (diff > 1.5) {
+          sendYouTubeCommand('seekTo', [position_at_start, true]);
+        }
+      }
+    }
+  }, [
+    activeSession?.started_at,
+    activeSession?.position_at_start,
+    activeSession?.is_playing,
+    activeSession?.track_id,
+    activeSession?.last_action_by,
+    iframeReady,
+    nowPlaying?.id,
+    tracks
+  ]);
 
   // Lắng nghe trạng thái phát để hiện nút Unmute Fallback cho Guest
   useEffect(() => {
@@ -539,7 +610,7 @@ export default function MusicTab({ tracks, onRefresh }) {
     }
   };
 
-  // Host: Cập nhật vị trí nhạc liên tục cho Session
+  // Host: Định kỳ cập nhật vị trí nhạc để đồng bộ drift nhẹ
   useEffect(() => {
     if (activeSession?.role === 'host' && isPlaying) {
       const docId = activeSession.id;
@@ -551,28 +622,18 @@ export default function MusicTab({ tracks, onRefresh }) {
           await setDoc(doc(db, 'listening_sessions', docId), {
             is_playing: true,
             started_at: serverTimestamp(),
-            position_at_start: currentPos
+            position_at_start: currentPos,
+            last_action_by: currentUser.email
           }, { merge: true });
         } catch (e) {}
       };
-      updateHostState();
-      sessionSyncInterval.current = setInterval(updateHostState, 5000); // 5s/lần cập nhật
-    } else if (activeSession?.role === 'host' && !isPlaying) {
-      if (sessionSyncInterval.current) clearInterval(sessionSyncInterval.current);
-      const docId = activeSession.id;
-      const currentPos = nowPlaying?.loai === 'link' && ytPlayerRef.current && typeof ytPlayerRef.current.getCurrentTime === 'function'
-        ? ytPlayerRef.current.getCurrentTime() || 0
-        : (audioRef.current?.currentTime || 0);
-      setDoc(doc(db, 'listening_sessions', docId), {
-        is_playing: false,
-        position_at_start: currentPos
-      }, { merge: true }).catch(()=>{});
+      sessionSyncInterval.current = setInterval(updateHostState, 15000); // 15s/lần để tránh spam DB và giật lag
     }
 
     return () => {
       if (sessionSyncInterval.current) clearInterval(sessionSyncInterval.current);
     };
-  }, [activeSession?.role, isPlaying, nowPlaying]);
+  }, [activeSession?.role, isPlaying, nowPlaying, currentUser.email]);
 
 
   // Stop previous media and start selection instantly
@@ -664,13 +725,26 @@ export default function MusicTab({ tracks, onRefresh }) {
     const next = !isPlaying;
     setIsPlaying(next);
 
+    const currentPos = nowPlaying.loai === 'link' && ytPlayerRef.current && typeof ytPlayerRef.current.getCurrentTime === 'function'
+      ? ytPlayerRef.current.getCurrentTime() || 0
+      : (audioRef.current?.currentTime || 0);
+
     if (nowPlaying.loai === 'upload' && audioRef.current) {
       if (next) audioRef.current.play().catch(() => {});
       else audioRef.current.pause();
     } else if (nowPlaying.loai === 'link' && iframeReady) {
       sendYouTubeCommand(next ? 'playVideo' : 'pauseVideo');
     }
-  }, [isPlaying, nowPlaying, iframeReady, sendYouTubeCommand]);
+
+    if (activeSession) {
+      setDoc(doc(db, 'listening_sessions', activeSession.id), {
+        is_playing: next,
+        position_at_start: currentPos,
+        started_at: serverTimestamp(),
+        last_action_by: currentUser.email
+      }, { merge: true }).catch(()=>{});
+    }
+  }, [isPlaying, nowPlaying, iframeReady, sendYouTubeCommand, activeSession, currentUser.email]);
 
   const handleSelectTrack = useCallback((track, isGuest = false) => {
     if (activeSession?.role === 'guest' && !isGuest) {
@@ -700,16 +774,17 @@ export default function MusicTab({ tracks, onRefresh }) {
     setNowPlaying(track);
     setIsPlaying(true);
 
-    if (activeSession?.role === 'host' && !isGuest) {
+    if (activeSession && !isGuest) {
       setDoc(doc(db, 'listening_sessions', activeSession.id), {
         track_id: track.id,
         track: track,
         is_playing: true,
         started_at: serverTimestamp(),
-        position_at_start: 0
-      }, { merge: true });
+        position_at_start: 0,
+        last_action_by: currentUser.email
+      }, { merge: true }).catch(()=>{});
     }
-  }, [nowPlaying, sendYouTubeCommand, activeSession]);
+  }, [nowPlaying, sendYouTubeCommand, activeSession, currentUser.email]);
 
   /* --- Listen Together Host Handlers --- */
   const handleInviteFriend = async (friendEmail) => {
@@ -906,7 +981,7 @@ export default function MusicTab({ tracks, onRefresh }) {
           <div className="mx-2 mb-2 px-3 py-2 liquid-glass-sm rounded-xl flex items-center justify-between border border-primary/20 bg-primary/5">
             <div className="flex items-center gap-2">
               <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
-              <p className="text-xs font-medium">Đang phát cho: <span className="text-primary">{profiles[activeSession.participant] || activeSession.participant.split('@')[0]}</span></p>
+              <p className="text-xs font-medium">Đang phát cho: <span className="text-primary">{profiles[activeSession.participant.toLowerCase()] || activeSession.participant.split('@')[0]}</span></p>
             </div>
             <button onClick={handleStopSession} className="text-[10px] uppercase font-bold text-destructive px-2 py-1 bg-destructive/10 rounded-lg hover:bg-destructive/20">Dừng</button>
           </div>
@@ -1097,7 +1172,7 @@ export default function MusicTab({ tracks, onRefresh }) {
             ) : (
               friends.map(email => (
                 <div key={email} className="flex items-center justify-between p-3 rounded-xl bg-white/5 hover:bg-white/10 transition-colors">
-                  <p className="text-sm font-medium truncate flex-1">{profiles[email] || email.split('@')[0]}</p>
+                  <p className="text-sm font-medium truncate flex-1">{profiles[email.toLowerCase()] || email.split('@')[0]}</p>
                   <Button size="sm" onClick={() => handleInviteFriend(email)} className="h-8 rounded-lg gradient-primary text-xs">Mời</Button>
                 </div>
               ))
