@@ -120,6 +120,19 @@ export default function ChatWindow({ friend, currentUser, onBack }) {
 
       await addDoc(collection(db, 'messages'), msgData);
       setReplyTo(null);
+
+      // Gửi thông báo đẩy qua Cloud Function HTTPS
+      fetch('/api/sendNotification', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          type: 'chat',
+          senderEmail: currentUser.email,
+          senderName: currentUser.displayName || currentUser.email.split('@')[0],
+          receiverEmail: friend.friend_email,
+          content: textContent
+        })
+      }).catch(err => console.error("Lỗi gửi thông báo HTTP:", err));
     } catch (error) {
       console.error(error);
     }
