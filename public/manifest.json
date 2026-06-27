@@ -1,0 +1,22 @@
+{
+  "short_name": "Locket",
+  "name": "Đức & Quỳnh 💕",
+  "icons": [
+    {
+      "src": "icon-192.png",
+      "type": "image/png",
+      "sizes": "192x192"
+    },
+    {
+      "src": "icon-512.png",
+      "type": "image/png",
+      "sizes": "512x512"
+    }
+  ],
+  "start_url": "/",
+  "background_color": "#FFF0F5",
+  "theme_color": "#FF69B4",
+  "display": "standalone",
+  "orientation": "portrait",
+  "gcm_sender_id": "103953800507"
+}

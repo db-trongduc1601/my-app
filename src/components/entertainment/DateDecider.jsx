@@ -1,8 +1,9 @@
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { MapPin, Clock, Ticket, RefreshCw, Plus, X, Loader2 } from 'lucide-react';
-import { base44 } from '@/api/base44Client';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { db } from '../../firebase';
+import { collection, addDoc } from 'firebase/firestore';
+import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -15,7 +16,7 @@ const FilterBtn = ({ active, onClick, emoji, label }) => (
       "flex-1 flex flex-col items-center gap-1.5 py-3 rounded-2xl border-2 transition-all duration-200 text-sm font-medium",
       active
         ? "border-primary bg-primary text-primary-foreground shadow-md scale-105"
-        : "border-border bg-card text-muted-foreground hover:border-primary/30"
+        : "border-border liquid-glass-sm text-muted-foreground hover:border-primary/30"
     )}>
     <span className="text-xl">{emoji}</span>
     {label}
@@ -26,7 +27,7 @@ function SpotDetailModal({ spot, open, onClose }) {
   if (!spot) return null;
   return (
     <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className="max-w-sm rounded-2xl p-0 overflow-hidden border-0">
+      <DialogContent className="max-w-sm rounded-2xl p-0 overflow-hidden border-0 liquid-glass">
         {spot.anh
           ? <img src={spot.anh} alt={spot.ten_dia_diem} className="w-full h-44 object-cover" />
           : <div className="w-full h-32 gradient-rose flex items-center justify-center text-5xl">🏞️</div>
@@ -39,9 +40,9 @@ function SpotDetailModal({ spot, open, onClose }) {
             {spot.gio_hoat_dong && <div className="flex items-center gap-2 text-sm text-muted-foreground"><Clock size={13}/>{spot.gio_hoat_dong}</div>}
           </div>
           <div className="flex gap-2 flex-wrap">
-            <span className="text-xs px-2 py-1 rounded-full bg-secondary">{spot.khong_gian}</span>
-            <span className="text-xs px-2 py-1 rounded-full bg-secondary">{spot.nang_luong}</span>
-            <span className="text-xs px-2 py-1 rounded-full bg-secondary">{spot.thoi_diem}</span>
+            <span className="text-xs px-2 py-1 rounded-full liquid-glass-sm">{spot.khong_gian}</span>
+            <span className="text-xs px-2 py-1 rounded-full liquid-glass-sm">{spot.nang_luong}</span>
+            <span className="text-xs px-2 py-1 rounded-full liquid-glass-sm">{spot.thoi_diem}</span>
           </div>
         </div>
       </DialogContent>
@@ -72,12 +73,18 @@ export default function DateDecider({ spots, onRefresh }) {
   const handleAdd = async () => {
     if (!form.ten_dia_diem) return;
     setSaving(true);
-    await base44.entities.DateSpot.create(form);
-    toast.success('📍 Đã thêm địa điểm!');
-    setForm(EMPTY_FORM);
-    setShowAdd(false);
-    setSaving(false);
-    onRefresh?.();
+    try {
+      await addDoc(collection(db, 'date_spots'), form);
+      toast.success('📍 Đã thêm địa điểm!');
+      setForm(EMPTY_FORM);
+      setShowAdd(false);
+      onRefresh?.();
+    } catch (error) {
+      console.error(error);
+      toast.error('Lỗi khi thêm địa điểm!');
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -90,7 +97,7 @@ export default function DateDecider({ spots, onRefresh }) {
       <AnimatePresence>
         {showAdd && (
           <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
-            className="glass-card rounded-2xl p-4 space-y-3">
+            className="liquid-glass rounded-2xl p-4 space-y-3">
             <Input placeholder="Tên địa điểm *" value={form.ten_dia_diem} onChange={e => setForm(f => ({...f, ten_dia_diem: e.target.value}))} />
             <div className="grid grid-cols-3 gap-2">
               <Select value={form.khong_gian} onValueChange={v => setForm(f => ({...f, khong_gian: v}))}>
@@ -165,7 +172,7 @@ export default function DateDecider({ spots, onRefresh }) {
             </motion.div>
           ) : filtered.map(spot => (
             <motion.div key={spot.id} layout initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95 }}
-              className="glass-card rounded-2xl p-3 flex gap-3 items-center cursor-pointer"
+              className="liquid-glass liquid-glass-interactive rounded-2xl p-3 flex gap-3 items-center cursor-pointer"
               onClick={() => setSelected(spot)}>
               {spot.anh
                 ? <img src={spot.anh} alt={spot.ten_dia_diem} className="w-14 h-14 rounded-xl object-cover flex-shrink-0" />
@@ -175,8 +182,8 @@ export default function DateDecider({ spots, onRefresh }) {
                 <p className="font-semibold text-sm truncate">{spot.ten_dia_diem}</p>
                 {spot.dia_chi && <p className="text-xs text-muted-foreground mt-0.5 truncate"><MapPin size={10} className="inline mr-1"/>{spot.dia_chi}</p>}
                 <div className="flex gap-1.5 mt-1 flex-wrap">
-                  <span className="text-xs px-2 py-0.5 rounded-full bg-secondary">{spot.khong_gian}</span>
-                  <span className="text-xs px-2 py-0.5 rounded-full bg-secondary">{spot.nang_luong}</span>
+                  <span className="text-xs px-2 py-0.5 rounded-full liquid-glass-sm">{spot.khong_gian}</span>
+                  <span className="text-xs px-2 py-0.5 rounded-full liquid-glass-sm">{spot.nang_luong}</span>
                 </div>
               </div>
             </motion.div>

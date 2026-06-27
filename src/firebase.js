@@ -14,7 +14,7 @@ const firebaseConfig = {
 };
 
 // Khởi tạo Firebase
-const app = initializeApp(firebaseConfig);
+export const app = initializeApp(firebaseConfig);
 
 // Xuất các công cụ ra để dùng
 export const auth = getAuth(app);

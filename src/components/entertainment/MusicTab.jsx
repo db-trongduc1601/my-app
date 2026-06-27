@@ -1,10 +1,11 @@
 import { useState, useRef } from 'react';
-import { Music, Plus, Loader2, Link2, Upload, Play, Trash2, ExternalLink } from 'lucide-react';
+import { Music, Plus, Loader2, Link2, Upload, Trash2, ExternalLink } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { base44 } from '@/api/base44Client';
+import { db, storage } from '../../firebase';
+import { collection, doc, addDoc, deleteDoc } from 'firebase/firestore';
+import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { Textarea } from '@/components/ui/textarea';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 
@@ -20,15 +21,25 @@ function TrackCard({ track, onDelete }) {
 
   const handleDelete = async () => {
     setDeleting(true);
-    await base44.entities.MusicTrack.delete(track.id);
-    toast.success('Đã xóa');
-    onDelete?.();
+    try {
+      // If file was uploaded to Firebase storage, delete it as well
+      if (track.url && track.url.includes('firebasestorage')) {
+        const fileRef = ref(storage, track.url);
+        await deleteObject(fileRef).catch(() => {});
+      }
+      await deleteDoc(doc(db, 'music_tracks', track.id));
+      toast.success('Đã xóa');
+      onDelete?.();
+    } catch (error) {
+      console.error(error);
+      toast.error('Lỗi khi xóa bài hát!');
+    }
     setDeleting(false);
   };
 
   return (
     <motion.div layout initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
-      className="glass-card rounded-2xl overflow-hidden">
+      className="liquid-glass liquid-glass-interactive rounded-2xl overflow-hidden">
       {embedUrl && (
         <div className="aspect-video w-full">
           <iframe src={embedUrl} className="w-full h-full" allowFullScreen allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" />
@@ -69,18 +80,32 @@ export default function MusicTab({ tracks, onRefresh }) {
   const handleSave = async () => {
     if (!form.ten_bai) return;
     setSaving(true);
-    let url = form.url;
-    if (mode === 'upload' && file) {
-      const res = await base44.integrations.Core.UploadFile({ file });
-      url = res.file_url;
+    try {
+      let url = form.url;
+      if (mode === 'upload' && file) {
+        const fileExt = file.name ? file.name.split('.').pop() : 'mp3';
+        const fileName = `music_tracks/${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExt}`;
+        const storageRef = ref(storage, fileName);
+        await uploadBytes(storageRef, file);
+        url = await getDownloadURL(storageRef);
+      }
+      await addDoc(collection(db, 'music_tracks'), {
+        ...form,
+        url,
+        loai: mode,
+        created_date: new Date().toISOString()
+      });
+      toast.success('🎵 Đã thêm bài hát!');
+      setForm({ ten_bai: '', nghe_si: '', url: '', ghi_chu: '' });
+      setFile(null);
+      setShowForm(false);
+      onRefresh?.();
+    } catch (error) {
+      console.error(error);
+      toast.error('Lỗi khi lưu bài hát!');
+    } finally {
+      setSaving(false);
     }
-    await base44.entities.MusicTrack.create({ ...form, url, loai: mode });
-    toast.success('🎵 Đã thêm bài hát!');
-    setForm({ ten_bai: '', nghe_si: '', url: '', ghi_chu: '' });
-    setFile(null);
-    setShowForm(false);
-    setSaving(false);
-    onRefresh?.();
   };
 
   return (
@@ -93,16 +118,16 @@ export default function MusicTab({ tracks, onRefresh }) {
       <AnimatePresence>
         {showForm && (
           <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
-            className="glass-card rounded-2xl p-4 space-y-3">
+            className="liquid-glass rounded-2xl p-4 space-y-3">
             <div className="flex gap-2">
               <button onClick={() => setMode('link')}
                 className={cn("flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl text-sm font-medium transition-all",
-                  mode === 'link' ? "bg-primary text-primary-foreground" : "bg-secondary text-muted-foreground")}>
+                  mode === 'link' ? "bg-primary text-primary-foreground" : "liquid-glass-sm text-muted-foreground")}>
                 <Link2 size={14} /> Dán link
               </button>
               <button onClick={() => setMode('upload')}
                 className={cn("flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl text-sm font-medium transition-all",
-                  mode === 'upload' ? "bg-primary text-primary-foreground" : "bg-secondary text-muted-foreground")}>
+                  mode === 'upload' ? "bg-primary text-primary-foreground" : "liquid-glass-sm text-muted-foreground")}>
                 <Upload size={14} /> Upload file
               </button>
             </div>

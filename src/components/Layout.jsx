@@ -1,108 +1,181 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Outlet, useLocation, Link } from 'react-router-dom';
-import { Home, Utensils, Heart, Star, Music, MessageCircle } from 'lucide-react';
+import { Home, MessageCircle, Users } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import TopBar from '@/components/TopBar';
+import BottomNav from '@/components/BottomNav';
 import GlobalChat from '@/components/GlobalChat';
+import FriendsSidebar from '@/components/friends/FriendsSidebar';
 import { AnimatePresence } from 'framer-motion';
 import { auth } from '../firebase';
 import { signOut } from 'firebase/auth';
+import { useToast } from "@/components/ui/use-toast";
+import { registerFCMToken } from "@/hooks/useNotifications";
 
-const tabs = [
-  { path: '/', icon: Home, label: 'Trang chủ' },
-  { path: '/food', icon: Utensils, label: 'Ăn gì?' },
-  { path: '/vault', icon: Heart, label: 'Đồ dùng' },
-  { path: '/quests', icon: Star, label: 'Nhiệm vụ' },
-  { path: '/entertainment', icon: Music, label: 'Giải trí' },
-];
+
 
 export default function Layout() {
   const location = useLocation();
-  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [chatOpen, setChatOpen] = useState(false);
+  const [friendsOpen, setFriendsOpen] = useState(false);
+  const { toast } = useToast();
+  const [showNotificationPrompt, setShowNotificationPrompt] = useState(false);
 
-  // Đã xóa hàm useEffect gọi base44 cũ đi để tiệt nọc lỗi 404!
+  useEffect(() => {
+    // Chỉ hiển thị nếu trình duyệt hỗ trợ Notification và quyền hiện tại là default
+    if ('Notification' in window && Notification.permission === 'default') {
+      setShowNotificationPrompt(true);
+    }
+  }, []);
+
+  const requestNotificationPermission = async () => {
+    if (!('Notification' in window)) return;
+    
+    try {
+      const permission = await Notification.requestPermission();
+      if (permission === 'granted') {
+        setShowNotificationPrompt(false);
+        toast({
+          title: "Đã bật thông báo! 💕",
+          description: "Bạn sẽ nhận được thông báo đẩy thời gian thực từ người ấy.",
+        });
+        
+        // Đăng ký thiết bị nhận thông báo đẩy FCM ngay lập tức
+        registerFCMToken(auth.currentUser);
+        
+        // Gửi thử một thông báo test để xác nhận hoạt động
+        if ('serviceWorker' in navigator) {
+          const reg = await navigator.serviceWorker.ready;
+          reg.showNotification('Đức & Quỳnh 💕', {
+            body: 'Thông báo đẩy đã được kích hoạt thành công! 🥰',
+            icon: '/icon-192.png',
+            badge: '/icon-192.png',
+            vibrate: [100, 50, 100],
+          });
+        } else {
+          new Notification('Đức & Quỳnh 💕', {
+            body: 'Thông báo đẩy đã được kích hoạt thành công! 🥰',
+            icon: '/icon-192.png',
+          });
+        }
+      } else {
+        setShowNotificationPrompt(false);
+        toast({
+          variant: "destructive",
+          title: "Chưa bật được thông báo",
+          description: "Hãy mở cài đặt điện thoại và bật quyền thông báo cho ứng dụng nhé!",
+        });
+      }
+    } catch (error) {
+      console.error("Lỗi yêu cầu quyền thông báo:", error);
+    }
+  };
 
   return (
-    <div className="min-h-screen bg-background flex flex-col max-w-md mx-auto relative">
+    <div className="h-[100dvh] bg-background flex flex-col max-w-md mx-auto relative overflow-hidden shadow-2xl pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]">
       {/* Background blobs */}
-      <div className="fixed top-0 left-0 w-full h-full pointer-events-none overflow-hidden z-0">
-        <div className="absolute -top-20 -right-20 w-72 h-72 rounded-full opacity-20 dark:opacity-10" style={{background: 'hsl(340,97%,64%)'}} />
-        <div className="absolute top-1/3 -left-16 w-56 h-56 rounded-full opacity-10 dark:opacity-5" style={{background: 'hsl(20,80%,70%)'}} />
-        <div className="absolute bottom-20 right-0 w-40 h-40 rounded-full opacity-15 dark:opacity-5" style={{background: 'hsl(340,50%,80%)'}} />
+      <div className="mesh-bg">
+        <div className="mesh-blob mesh-blob-1" />
+        <div className="mesh-blob mesh-blob-2" />
+        <div className="mesh-blob mesh-blob-3" />
+        <div className="mesh-blob mesh-blob-4" />
       </div>
 
       {/* Top bar */}
-      <div className="relative z-20 flex items-center justify-between px-4 pt-3 pb-1">
-        {/* Friends icon - top left */}
-        <button
-          onClick={() => setSidebarOpen(true)}
-          className="w-8 h-8 rounded-full flex items-center justify-center bg-secondary hover:bg-muted transition-colors"
-          title="Bạn bè"
-        >
-          <MessageCircle size={15} className="text-muted-foreground" />
-        </button>
+      <div className="relative z-20 mx-4 mt-3 mb-1">
+        <div className="liquid-glass-heavy rim-light rounded-full px-3 py-1.5 flex items-center gap-2">
+          {/* Friends icon - top left */}
+          <button
+            onClick={() => setFriendsOpen(true)}
+            className="w-7 h-7 rounded-full flex items-center justify-center hover:bg-white/20 transition-colors"
+            title="Bạn bè"
+          >
+            <Users size={14} className="text-muted-foreground" />
+          </button>
 
-        {/* --- KHU VỰC AVATAR & ĐĂNG XUẤT MỚI --- */}
-        <div className="flex items-center gap-2 ml-auto mr-3 bg-white/50 backdrop-blur-sm px-3 py-1.5 rounded-full shadow-sm border border-pink-100">
+          {/* Global Chat icon - next to friends */}
+          <button
+            onClick={() => setChatOpen(true)}
+            className="w-7 h-7 rounded-full flex items-center justify-center hover:bg-white/20 transition-colors"
+            title="Chat chung"
+          >
+            <MessageCircle size={14} className="text-muted-foreground" />
+          </button>
+
+          {/* spacer */}
+          <div className="flex-1" />
+
+          {/* --- KHU VỰC AVATAR & ĐĂNG XUẤT MỚI --- */}
           <img 
             src={auth.currentUser?.photoURL || "https://via.placeholder.com/40"} 
             alt="Avatar" 
-            className="w-7 h-7 rounded-full border border-pink-300"
+            className="w-6 h-6 rounded-full ring-2 ring-white/30"
           />
-          <span className="font-medium text-gray-700 text-sm">
+          <span className="font-medium text-foreground text-xs">
             {auth.currentUser?.displayName?.split(' ')[0] || "Bạn yêu"}
           </span>
           <button 
             onClick={() => signOut(auth)}
-            className="ml-1 px-2 py-0.5 bg-red-50 text-red-500 rounded-full text-xs font-semibold hover:bg-red-100 transition-colors"
+            className="ml-1 px-2 py-0.5 liquid-glass-sm text-destructive text-[10px] font-semibold hover:liquid-glow transition-all"
           >
             Thoát
           </button>
-        </div>
 
-        {/* Giữ lại TopBar vì có thể nó đang chứa icon Mặt trăng (Dark mode) */}
-        <TopBar />
+          {/* Giữ lại TopBar vì có thể nó đang chứa icon Mặt trăng (Dark mode) */}
+          <TopBar />
+        </div>
       </div>
 
-      {/* Page content */}
-      <main className="flex-1 overflow-y-auto pb-24 relative z-10">
+      {/* Notification Prompt Banner */}
+      {showNotificationPrompt && (
+        <div className="mx-4 mt-2 mb-1 relative z-20">
+          <div className="liquid-glass border border-pink-300/40 dark:border-pink-500/20 bg-pink-400/10 dark:bg-pink-950/20 rounded-xl p-2.5 flex items-center justify-between gap-3 shadow-md">
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-full bg-pink-500/20 flex items-center justify-center animate-bounce">
+                <span className="text-lg">🔔</span>
+              </div>
+              <div className="text-left">
+                <h4 className="font-bold text-xs text-foreground">Bật thông báo ứng dụng</h4>
+                <p className="text-[10px] text-muted-foreground leading-tight">Nhận tin nhắn & ảnh Locket tức thì</p>
+              </div>
+            </div>
+            <button
+              onClick={requestNotificationPermission}
+              className="px-3.5 py-1.5 bg-gradient-to-r from-pink-400 to-pink-500 hover:from-pink-500 hover:to-pink-600 text-white rounded-full text-[11px] font-semibold shadow-sm transition-all active:scale-95 duration-200"
+            >
+              Bật ngay
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Page content — will-change promotes this to its own GPU layer,
+          keeping scroll independent from the fixed tabbar's backdrop-filter */}
+      <main className="flex-1 overflow-y-auto pb-28 relative z-10 scroll-smooth" style={{ WebkitOverflowScrolling: 'touch', willChange: 'transform' }}>
         <Outlet />
       </main>
 
-      {/* Bottom navigation */}
-      <nav className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-md z-50">
-        <div className="mx-3 mb-4 glass-card rounded-2xl px-1 py-1.5">
-          <div className="flex items-center justify-around">
-            {tabs.map(({ path, icon: Icon, label }) => {
-              const active = location.pathname === path || 
-                (path !== '/' && location.pathname.startsWith(path));
-              return (
-                <Link
-                  key={path}
-                  to={path}
-                  className={cn(
-                    "flex flex-col items-center gap-0.5 px-3 py-1.5 rounded-xl transition-all duration-200",
-                    active
-                      ? "bg-primary text-primary-foreground shadow-md scale-105"
-                      : "text-muted-foreground hover:text-foreground hover:bg-secondary"
-                  )}
-                >
-                  <Icon size={18} />
-                  <span className="text-[10px] font-medium">{label}</span>
-                </Link>
-              );
-            })}
-          </div>
-        </div>
-      </nav>
+      {/* iOS-26 Liquid Glass Bottom Navigation */}
+      <BottomNav />
 
       {/* Global Chat */}
       <AnimatePresence>
-        {sidebarOpen && (
+        {chatOpen && (
           <GlobalChat
-            open={sidebarOpen}
-            onClose={() => setSidebarOpen(false)}
+            open={chatOpen}
+            onClose={() => setChatOpen(false)}
             currentUser={auth.currentUser} 
+          />
+        )}
+      </AnimatePresence>
+
+      {/* Friends Sidebar */}
+      <AnimatePresence>
+        {friendsOpen && (
+          <FriendsSidebar
+            open={friendsOpen}
+            onClose={() => setFriendsOpen(false)}
+            currentUser={auth.currentUser}
           />
         )}
       </AnimatePresence>

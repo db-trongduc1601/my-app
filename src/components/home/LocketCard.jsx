@@ -138,7 +138,7 @@ function MemoryThumb({ photo, onDeleted }) {
   return (
     <>
       <div className="flex-shrink-0 w-20 space-y-1">
-        <div className="w-20 h-20 rounded-2xl overflow-hidden cursor-pointer relative bg-secondary"
+        <div className="w-20 h-20 rounded-2xl overflow-hidden cursor-pointer relative liquid-glass-sm"
           onClick={() => setFullscreen(true)}>
           {isVideo
             ? <video src={photo.anh_url} className="w-full h-full object-cover" muted playsInline />
@@ -149,11 +149,11 @@ function MemoryThumb({ photo, onDeleted }) {
         </div>
         <div className="flex gap-1">
           <button onClick={handleDownload}
-            className="flex-1 flex items-center justify-center py-1 rounded-lg bg-secondary hover:bg-muted transition-colors">
+            className="flex-1 flex items-center justify-center py-1 rounded-lg liquid-glass-sm hover:liquid-glow transition-all">
             <Download size={11} className="text-muted-foreground" />
           </button>
           <button onClick={handleDelete} disabled={deleting}
-            className="flex-1 flex items-center justify-center py-1 rounded-lg bg-secondary hover:bg-destructive/10 transition-colors">
+            className="flex-1 flex items-center justify-center py-1 rounded-lg liquid-glass-sm hover:bg-destructive/10 transition-all">
             {deleting ? <Loader2 size={11} className="animate-spin text-destructive" /> : <Trash2 size={11} className="text-destructive" />}
           </button>
         </div>
@@ -263,6 +263,19 @@ export default function LocketCard({ latestPhoto, allPhotos = [], onUploaded, on
         createdAt: serverTimestamp() // Dùng để sắp xếp real-time
       });
 
+      // Gửi thông báo đẩy qua Cloud Function HTTPS
+      fetch('/api/sendNotification', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          type: 'locket',
+          senderEmail: currentUser.email,
+          senderName: currentUser.displayName || currentUser.email.split('@')[0],
+          receiverEmail: 'global',
+          content: message || 'Đã gửi một khoảnh khắc mới.'
+        })
+      }).catch(err => console.error("Lỗi gửi thông báo Locket HTTP:", err));
+
       toast.success('💕 Đã gửi locket mới!');
       closeForm();
     } catch (error) {
@@ -304,7 +317,7 @@ export default function LocketCard({ latestPhoto, allPhotos = [], onUploaded, on
   return (
     <div className="space-y-3">
       {/* Main locket display */}
-      <div className="relative rounded-3xl overflow-hidden aspect-square shadow-xl">
+      <div className="relative rounded-3xl overflow-hidden aspect-square liquid-glass p-0 rim-light">
         {latestPhoto?.anh_url ? (
           isVideo ? (
             <video
@@ -351,17 +364,17 @@ export default function LocketCard({ latestPhoto, allPhotos = [], onUploaded, on
           {latestPhoto && (
             <>
               <button onClick={() => setFullscreen(true)}
-                className="bg-white/90 backdrop-blur-sm rounded-full p-2 shadow hover:scale-110 transition-transform">
+                className="liquid-glass-sm rounded-full p-2 liquid-glass-interactive">
                 <Maximize2 size={15} className="text-foreground" />
               </button>
               <button onClick={handleDelete} disabled={deleting}
-                className="bg-white/90 backdrop-blur-sm rounded-full p-2 shadow hover:scale-110 transition-transform">
+                className="liquid-glass-sm rounded-full p-2 liquid-glass-interactive">
                 {deleting ? <Loader2 size={15} className="animate-spin text-destructive" /> : <Trash2 size={15} className="text-destructive" />}
               </button>
             </>
           )}
           <button onClick={() => setShowForm(true)}
-            className="bg-white/90 backdrop-blur-sm rounded-full p-2 shadow hover:scale-110 transition-transform">
+            className="liquid-glass-sm rounded-full p-2 liquid-glass-interactive">
             <Camera size={15} className="text-primary" />
           </button>
         </div>
@@ -405,18 +418,18 @@ export default function LocketCard({ latestPhoto, allPhotos = [], onUploaded, on
       <AnimatePresence>
         {showForm && (
           <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 12 }}
-            className="glass-card rounded-2xl p-4 space-y-3">
+            className="liquid-glass rim-light rounded-2xl p-4 space-y-3">
             <div className="flex items-center justify-between">
               <span className="font-semibold text-sm">Gửi locket mới 💌</span>
               <button onClick={closeForm}><X size={16} className="text-muted-foreground" /></button>
             </div>
 
             {/* Media type tabs */}
-            <div className="flex gap-1 bg-secondary rounded-xl p-1">
+            <div className="flex gap-1 liquid-glass-sm rounded-xl p-1">
               {MEDIA_TABS.map(t => (
                 <button key={t.key} onClick={() => { setMediaTab(t.key); setFile(null); setPreview(null); }}
                   className={cn("flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-xs font-semibold transition-all",
-                    mediaTab === t.key ? "bg-card shadow-sm text-foreground" : "text-muted-foreground")}>
+                    mediaTab === t.key ? "liquid-glass shadow-sm text-foreground" : "text-muted-foreground")}>
                   {t.emoji} {t.label}
                 </button>
               ))}

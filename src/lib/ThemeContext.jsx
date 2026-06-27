@@ -13,8 +13,14 @@ export function ThemeProvider({ children }) {
 
   useEffect(() => {
     const root = document.documentElement;
-    if (theme === 'dark') root.classList.add('dark');
-    else root.classList.remove('dark');
+    const metaTheme = document.getElementById('meta-theme-color');
+    if (theme === 'dark') {
+      root.classList.add('dark');
+      if (metaTheme) metaTheme.setAttribute('content', '#130b0e');
+    } else {
+      root.classList.remove('dark');
+      if (metaTheme) metaTheme.setAttribute('content', '#fcf5f7');
+    }
     localStorage.setItem('couple-theme', theme);
   }, [theme]);
 

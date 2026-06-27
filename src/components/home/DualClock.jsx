@@ -41,12 +41,12 @@ export default function DualClock() {
   const usTime = format(usCity.tz);
 
   return (
-    <div className="glass-card rounded-2xl overflow-hidden">
+    <div className="liquid-glass rim-light rounded-2xl overflow-hidden">
       <div className="flex items-center justify-between px-4 pt-3 pb-1">
         <span className="text-xs font-semibold text-muted-foreground uppercase tracking-widest">Đồng hồ</span>
         <Dialog open={open} onOpenChange={setOpen}>
           <DialogTrigger asChild>
-            <button className="p-1 rounded-full hover:bg-secondary transition-colors">
+            <button className="p-1 rounded-full liquid-glass-sm hover:liquid-glow transition-all">
               <Settings size={14} className="text-muted-foreground" />
             </button>
           </DialogTrigger>
@@ -78,8 +78,9 @@ export default function DualClock() {
           </DialogContent>
         </Dialog>
       </div>
-      <div className="flex divide-x divide-border">
+      <div className="flex items-stretch">
         <ClockDisplay time={vnTime} label="Việt Nam" flag="🇻🇳" />
+        <div className="w-px gradient-divider self-stretch my-3" />
         <ClockDisplay time={usTime} label={usCity.label} flag="🇺🇸" />
       </div>
     </div>

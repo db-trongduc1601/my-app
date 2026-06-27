@@ -1,6 +1,8 @@
 import { useQuery } from '@tanstack/react-query';
-import { base44 } from '@/api/base44Client';
+import { db, auth } from '../firebase';
+import { collection, getDocs, addDoc } from 'firebase/firestore';
 import FoodDecider from '@/components/food/FoodDecider';
+import FoodSwipeMatcher from '@/components/food/FoodSwipeMatcher';
 import { Plus, X, Loader2 } from 'lucide-react';
 import { useState } from 'react';
 import { Input } from '@/components/ui/input';
@@ -8,6 +10,7 @@ import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { AnimatePresence, motion } from 'framer-motion';
 import { toast } from 'sonner';
+import { cn } from '@/lib/utils';
 
 const EMPTY_FORM = {
   ten_mon: '', nhiet_do: 'Nóng hổi', loai_no: 'Ăn no nê',
@@ -16,9 +19,17 @@ const EMPTY_FORM = {
 };
 
 export default function Food() {
+  const currentUser = auth.currentUser;
+  const [activeTab, setActiveTab] = useState('decider'); // 'decider' hoặc 'swipe'
+
   const { data: foods = [], refetch } = useQuery({
     queryKey: ['food'],
-    queryFn: () => base44.entities.FoodMatch.list('ten_mon'),
+    queryFn: async () => {
+      const querySnapshot = await getDocs(collection(db, 'foods'));
+      return querySnapshot.docs
+        .map(doc => ({ id: doc.id, ...doc.data() }))
+        .sort((a, b) => (a.ten_mon || '').localeCompare(b.ten_mon || ''));
+    },
   });
 
   const [showAdd, setShowAdd] = useState(false);
@@ -28,12 +39,18 @@ export default function Food() {
   const handleAdd = async () => {
     if (!form.ten_mon) return;
     setSaving(true);
-    await base44.entities.FoodMatch.create({ ...form, chot_don: false });
-    toast.success(`🍜 Đã thêm ${form.ten_mon}!`);
-    setForm(EMPTY_FORM);
-    setShowAdd(false);
-    setSaving(false);
-    refetch();
+    try {
+      await addDoc(collection(db, 'foods'), { ...form, chot_don: false });
+      toast.success(`🍜 Đã thêm ${form.ten_mon}!`);
+      setForm(EMPTY_FORM);
+      setShowAdd(false);
+      refetch();
+    } catch (error) {
+      console.error(error);
+      toast.error('Lỗi khi thêm món ăn!');
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -44,15 +61,31 @@ export default function Food() {
           <p className="text-xs text-muted-foreground mt-0.5">hết lo không biết ăn gì nữa</p>
         </div>
         <button onClick={() => setShowAdd(v => !v)}
-          className="w-9 h-9 rounded-full bg-primary text-primary-foreground flex items-center justify-center shadow-md hover:opacity-90 transition">
+          className="w-9 h-9 rounded-full gradient-primary text-primary-foreground flex items-center justify-center shadow-md animate-glow-pulse hover:opacity-90 transition">
           {showAdd ? <X size={16} /> : <Plus size={16} />}
+        </button>
+      </div>
+
+      {/* Sub-tabs */}
+      <div className="flex gap-2 liquid-glass rounded-2xl p-1">
+        <button onClick={() => setActiveTab('decider')}
+          className={cn("flex-1 py-2 rounded-xl text-sm font-semibold transition-all",
+            activeTab === 'decider' ? "liquid-glass shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground")}
+        >
+          Gợi ý & Bộ lọc 🔍
+        </button>
+        <button onClick={() => setActiveTab('swipe')}
+          className={cn("flex-1 py-2 rounded-xl text-sm font-semibold transition-all",
+            activeTab === 'swipe' ? "liquid-glass shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground")}
+        >
+          Game quẹt món 🎯
         </button>
       </div>
 
       <AnimatePresence>
         {showAdd && (
           <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
-            className="glass-card rounded-2xl p-4 space-y-3">
+            className="liquid-glass rim-light rounded-2xl p-4 space-y-3">
             <p className="text-sm font-semibold">Thêm món mới</p>
             <Input placeholder="Tên món *" value={form.ten_mon} onChange={e => setForm(f => ({...f, ten_mon: e.target.value}))} />
             <div className="grid grid-cols-2 gap-2">
@@ -113,7 +146,8 @@ export default function Food() {
         )}
       </AnimatePresence>
 
-      <FoodDecider foods={foods} onConfirm={refetch} onRefresh={refetch} />
+      {activeTab === 'decider' && <FoodDecider foods={foods} onConfirm={refetch} onRefresh={refetch} />}
+      {activeTab === 'swipe' && <FoodSwipeMatcher foods={foods} currentUser={currentUser} onRefresh={refetch} />}
     </div>
   );
 }

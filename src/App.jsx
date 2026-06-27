@@ -16,9 +16,11 @@ import { useState, useEffect } from 'react';
 import { auth } from './firebase';
 import Login from './pages/Login';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
+import { useNotifications } from '@/hooks/useNotifications';
 
 const AuthenticatedApp = () => {
-  const { isLoadingAuth, isLoadingPublicSettings, authError, navigateToLogin } = useAuth();
+  const { user, isLoadingAuth, isLoadingPublicSettings, authError, navigateToLogin } = useAuth();
+  useNotifications(user);
 
   if (isLoadingPublicSettings || isLoadingAuth) {
     return (

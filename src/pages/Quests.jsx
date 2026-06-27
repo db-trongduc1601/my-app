@@ -1,25 +1,31 @@
 import { useQuery } from '@tanstack/react-query';
-import { useEffect, useState } from 'react';
-import { base44 } from '@/api/base44Client';
+import { db, auth } from '../firebase';
+import { collection, getDocs } from 'firebase/firestore';
 import QuestBoard from '@/components/quests/QuestBoard';
 import RemindersList from '@/components/quests/RemindersList';
 import { Star, Bell } from 'lucide-react';
 
 export default function Quests() {
-  const [currentUser, setCurrentUser] = useState(null);
-
-  useEffect(() => {
-    base44.auth.me().then(setCurrentUser).catch(() => {});
-  }, []);
+  const currentUser = auth.currentUser;
 
   const { data: quests = [], refetch: refetchQuests } = useQuery({
     queryKey: ['quests'],
-    queryFn: () => base44.entities.QuestBoard.list('ten_nhiem_vu'),
+    queryFn: async () => {
+      const querySnapshot = await getDocs(collection(db, 'quests'));
+      return querySnapshot.docs
+        .map(doc => ({ id: doc.id, ...doc.data() }))
+        .sort((a, b) => (a.ten_nhiem_vu || '').localeCompare(b.ten_nhiem_vu || ''));
+    },
   });
 
   const { data: reminders = [], refetch: refetchReminders } = useQuery({
     queryKey: ['reminders'],
-    queryFn: () => base44.entities.Reminders.list('gio_nhac'),
+    queryFn: async () => {
+      const querySnapshot = await getDocs(collection(db, 'reminders'));
+      return querySnapshot.docs
+        .map(doc => ({ id: doc.id, ...doc.data() }))
+        .sort((a, b) => (a.gio_nhac || '').localeCompare(b.gio_nhac || ''));
+    },
   });
 
   return (
@@ -27,7 +33,7 @@ export default function Quests() {
       {/* Quests section */}
       <div className="space-y-4">
         <div className="flex items-center gap-2">
-          <div className="w-8 h-8 rounded-xl bg-yellow-100 flex items-center justify-center">
+          <div className="w-8 h-8 rounded-xl liquid-glass-sm flex items-center justify-center">
             <Star size={16} className="text-yellow-500" />
           </div>
           <div>
@@ -40,15 +46,15 @@ export default function Quests() {
 
       {/* Divider */}
       <div className="flex items-center gap-3">
-        <div className="flex-1 h-px bg-border" />
+        <div className="flex-1 gradient-divider" />
         <span className="text-xs text-muted-foreground">✦</span>
-        <div className="flex-1 h-px bg-border" />
+        <div className="flex-1 gradient-divider" />
       </div>
 
       {/* Reminders section */}
       <div className="space-y-4">
         <div className="flex items-center gap-2">
-          <div className="w-8 h-8 rounded-xl bg-primary/10 flex items-center justify-center">
+          <div className="w-8 h-8 rounded-xl liquid-glass-sm flex items-center justify-center">
             <Bell size={16} className="text-primary" />
           </div>
           <div>

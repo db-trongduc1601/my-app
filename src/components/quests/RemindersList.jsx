@@ -1,7 +1,8 @@
 import { useState } from 'react';
-import { Bell, Plus, Loader2, Pencil, Trash2, X } from 'lucide-react';
+import { Bell, Plus, Loader2, Pencil, Trash2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { base44 } from '@/api/base44Client';
+import { db } from '../../firebase';
+import { collection, doc, addDoc, updateDoc, deleteDoc } from 'firebase/firestore';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
@@ -21,7 +22,7 @@ function ReminderFormDialog({ initial, onSave, onClose }) {
   };
   return (
     <Dialog open onOpenChange={onClose}>
-      <DialogContent className="max-w-xs rounded-2xl">
+      <DialogContent className="max-w-xs rounded-2xl liquid-glass">
         <DialogHeader><DialogTitle>{initial ? 'Sửa nhắc nhở' : 'Thêm nhắc nhở'}</DialogTitle></DialogHeader>
         <div className="space-y-3 pt-1">
           <Input placeholder="Tên nhắc nhở..." value={form.ten_nhac_nho} onChange={e => setForm(f => ({...f, ten_nhac_nho: e.target.value}))} />
@@ -48,25 +49,48 @@ export default function RemindersList({ reminders, onUpdate }) {
     const newVal = !getActive(r);
     // Optimistic update immediately
     setLocalState(s => ({...s, [r.id]: newVal}));
-    await base44.entities.Reminders.update(r.id, { kich_hoat: newVal });
+    try {
+      await updateDoc(doc(db, 'reminders', r.id), { kich_hoat: newVal });
+    } catch (error) {
+      console.error(error);
+      toast.error('Lỗi khi cập nhật nhắc nhở!');
+      // revert optimistic UI
+      setLocalState(s => ({...s, [r.id]: !newVal}));
+    }
     onUpdate?.();
   };
 
-  const handleAdd = async (form) => {
-    await base44.entities.Reminders.create({ ...form, kich_hoat: true });
-    toast.success('⏰ Đã thêm nhắc nhở!');
+  const handleAdd = async (formData) => {
+    try {
+      await addDoc(collection(db, 'reminders'), { ...formData, kich_hoat: true });
+      toast.success('⏰ Đã thêm nhắc nhở!');
+    } catch (error) {
+      console.error(error);
+      toast.error('Lỗi khi thêm nhắc nhở!');
+    }
     onUpdate?.();
   };
 
-  const handleEdit = async (form) => {
-    await base44.entities.Reminders.update(form.id, form);
-    toast.success('Đã cập nhật!');
+  const handleEdit = async (formData) => {
+    try {
+      const { id, ...data } = formData;
+      await updateDoc(doc(db, 'reminders', id), data);
+      toast.success('Đã cập nhật!');
+    } catch (error) {
+      console.error(error);
+      toast.error('Lỗi khi cập nhật nhắc nhở!');
+    }
     onUpdate?.();
   };
 
   const handleDelete = async (id) => {
     setDeleting(id);
-    await base44.entities.Reminders.delete(id);
+    try {
+      await deleteDoc(doc(db, 'reminders', id));
+    } catch (error) {
+      console.error(error);
+      toast.error('Lỗi khi xóa nhắc nhở!');
+    }
     setDeleting(null);
     onUpdate?.();
   };
@@ -87,9 +111,9 @@ export default function RemindersList({ reminders, onUpdate }) {
             const active = getActive(r);
             return (
               <motion.div key={r.id} layout initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-                className="glass-card rounded-2xl p-3 flex items-center gap-3">
+                className="liquid-glass liquid-glass-interactive rounded-2xl p-3 flex items-center gap-3">
                 <div className={cn("w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0",
-                  active ? "bg-primary/10" : "bg-secondary")}>
+                  active ? "liquid-glass-sm" : "liquid-glass-sm opacity-60")}>
                   <Bell size={15} className={active ? "text-primary" : "text-muted-foreground"} />
                 </div>
                 <div className="flex-1 min-w-0">

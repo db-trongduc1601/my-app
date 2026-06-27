@@ -14,14 +14,39 @@ const Login = () => {
   };
 
   return (
-    <div className="flex flex-col items-center justify-center min-h-screen bg-[#FFF0F5] p-4">
-      <div className="bg-white p-8 rounded-3xl shadow-xl text-center max-w-sm w-full">
-        <h1 className="text-3xl font-bold text-pink-500 mb-2">Đức & Quỳnh 💕</h1>
-        <p className="text-gray-500 mb-8 text-sm">Không gian riêng của mình</p>
+    <div className="flex flex-col items-center justify-center min-h-screen bg-background p-4 relative overflow-hidden">
+      {/* Animated mesh background */}
+      <div className="mesh-bg">
+        <div className="mesh-blob mesh-blob-1" />
+        <div className="mesh-blob mesh-blob-2" />
+        <div className="mesh-blob mesh-blob-3" />
+        <div className="mesh-blob mesh-blob-4" />
+      </div>
+
+      {/* Floating particles */}
+      {['💕', '✨', '🌸', '💖', '🦋', '💫'].map((emoji, i) => (
+        <span
+          key={i}
+          className="particle"
+          style={{
+            left: `${15 + i * 14}%`,
+            animationDuration: `${6 + i * 2}s`,
+            animationDelay: `${i * 1.2}s`,
+            fontSize: `${0.8 + (i % 3) * 0.4}rem`
+          }}
+        >
+          {emoji}
+        </span>
+      ))}
+
+      {/* Login card */}
+      <div className="liquid-glass rim-light p-8 text-center max-w-sm w-full relative z-10 animate-shimmer">
+        <h1 className="font-display text-3xl font-bold text-primary text-glow mb-2">Đức & Quỳnh 💕</h1>
+        <p className="text-muted-foreground mb-8 text-sm">Không gian riêng của mình</p>
         
         <button 
           onClick={handleGoogleLogin}
-          className="w-full flex items-center justify-center gap-3 bg-white border-2 border-gray-200 rounded-xl px-4 py-3 text-gray-700 hover:bg-gray-50 hover:border-pink-300 transition-all font-medium shadow-sm"
+          className="w-full flex items-center justify-center gap-3 liquid-glass-sm liquid-glass-interactive px-4 py-3 text-foreground font-medium"
         >
           <img 
             src="https://www.svgrepo.com/show/475656/google-color.svg" 

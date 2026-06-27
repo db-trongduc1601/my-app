@@ -1,9 +1,10 @@
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { base44 } from '@/api/base44Client';
+import { db } from '../../firebase';
+import { doc, updateDoc, deleteDoc } from 'firebase/firestore';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
-import { ShoppingCart, Check, RefreshCw, MapPin, Clock, DollarSign, Pencil, Trash2, Loader2, Plus, X } from 'lucide-react';
+import { ShoppingCart, Check, RefreshCw, MapPin, DollarSign, Pencil, Trash2, Loader2, Plus, X } from 'lucide-react';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -15,8 +16,8 @@ const FilterBtn = ({ active, onClick, emoji, label }) => (
     className={cn(
       "flex-1 flex flex-col items-center gap-1 py-2.5 rounded-2xl border-2 transition-all duration-200 text-xs font-medium",
       active
-        ? "border-primary bg-primary text-primary-foreground shadow-md scale-105"
-        : "border-border bg-card text-muted-foreground hover:border-primary/30 hover:bg-secondary"
+        ? "border-primary gradient-primary text-primary-foreground liquid-glow scale-105"
+        : "border-transparent liquid-glass-sm text-muted-foreground hover:liquid-glow hover:border-primary/30"
     )}>
     <span className="text-lg">{emoji}</span>
     {label}
@@ -42,7 +43,7 @@ function RoundEditor({ roundLabel, options, onSave, onClose }) {
 
   return (
     <Dialog open onOpenChange={onClose}>
-      <DialogContent className="max-w-sm rounded-2xl">
+      <DialogContent className="max-w-sm rounded-2xl liquid-glass">
         <p className="font-semibold text-base mb-3">Chỉnh sửa: {roundLabel}</p>
         <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
           {items.map((it, idx) => (
@@ -82,15 +83,20 @@ function FoodEditModal({ food, open, onClose, onSave }) {
   const [saving, setSaving] = useState(false);
   const handle = async () => {
     setSaving(true);
-    await base44.entities.FoodMatch.update(food.id, form);
-    toast.success('Đã cập nhật!');
+    try {
+      await updateDoc(doc(db, 'foods', food.id), form);
+      toast.success('Đã cập nhật!');
+    } catch (error) {
+      console.error(error);
+      toast.error('Lỗi cập nhật món ăn!');
+    }
     setSaving(false);
     onSave?.();
     onClose();
   };
   return (
     <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className="max-w-sm rounded-2xl">
+      <DialogContent className="max-w-sm rounded-2xl liquid-glass">
         <p className="font-semibold text-base mb-3">Chỉnh sửa món</p>
         <div className="space-y-2">
           <Input placeholder="Tên món *" value={form.ten_mon} onChange={e => setForm(f => ({...f, ten_mon: e.target.value}))} />
@@ -127,15 +133,20 @@ function FoodDetailModal({ food, open, onClose, onConfirm }) {
   if (!food) return null;
   const handleConfirm = async () => {
     setConfirming(true);
-    await base44.entities.FoodMatch.update(food.id, { chot_don: true });
-    toast.success(`🍜 Chốt đơn: ${food.ten_mon}!`);
+    try {
+      await updateDoc(doc(db, 'foods', food.id), { chot_don: true });
+      toast.success(`🍜 Chốt đơn: ${food.ten_mon}!`);
+    } catch (error) {
+      console.error(error);
+      toast.error('Lỗi chốt đơn!');
+    }
     setConfirming(false);
     onConfirm?.();
     onClose();
   };
   return (
     <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className="max-w-sm rounded-2xl p-0 overflow-hidden border-0">
+      <DialogContent className="max-w-sm rounded-2xl p-0 overflow-hidden border-0 liquid-glass">
         {food.anh
           ? <img src={food.anh} alt={food.ten_mon} className="w-full h-48 object-cover" />
           : <div className="w-full h-32 gradient-rose flex items-center justify-center text-5xl">🍜</div>
@@ -148,7 +159,7 @@ function FoodDetailModal({ food, open, onClose, onConfirm }) {
           </div>
           <div className="flex gap-2 flex-wrap">
             {[food.nhiet_do, food.loai_no, food.kieu_an, food.quoc_tich, food.khoang_cach, food.ngan_sach].filter(Boolean).map(v => (
-              <span key={v} className="text-xs px-2 py-1 rounded-full bg-secondary">{v}</span>
+              <span key={v} className="text-xs px-2 py-1 rounded-full liquid-glass-sm">{v}</span>
             ))}
           </div>
           <Button onClick={handleConfirm} disabled={confirming || food.chot_don}
@@ -192,16 +203,26 @@ export default function FoodDecider({ foods, onConfirm, onRefresh }) {
 
   const handleUncheck = async (id, e) => {
     e.stopPropagation();
-    await base44.entities.FoodMatch.update(id, { chot_don: false });
-    toast.success('Đã bỏ chọn');
+    try {
+      await updateDoc(doc(db, 'foods', id), { chot_don: false });
+      toast.success('Đã bỏ chọn');
+    } catch (error) {
+      console.error(error);
+      toast.error('Lỗi bỏ chọn!');
+    }
     onRefresh?.();
   };
 
   const handleDelete = async (id, e) => {
     e.stopPropagation();
     setDeleting(id);
-    await base44.entities.FoodMatch.delete(id);
-    toast.success('Đã xóa món');
+    try {
+      await deleteDoc(doc(db, 'foods', id));
+      toast.success('Đã xóa món');
+    } catch (error) {
+      console.error(error);
+      toast.error('Lỗi xóa món!');
+    }
     setDeleting(null);
     onRefresh?.();
   };
@@ -219,7 +240,7 @@ export default function FoodDecider({ foods, onConfirm, onRefresh }) {
           <div className="flex gap-2 overflow-x-auto pb-1 no-scrollbar">
             {chosen.map(food => (
               <div key={food.id}
-                className="flex-shrink-0 w-32 glass-card rounded-2xl p-2 space-y-1.5 cursor-pointer hover:scale-105 transition-transform"
+                className="flex-shrink-0 w-32 liquid-glass liquid-glass-interactive rounded-2xl p-2 space-y-1.5 cursor-pointer hover:scale-105 transition-transform"
                 onClick={() => setSelected(food)}>
                 {food.anh
                   ? <img src={food.anh} alt={food.ten_mon} className="w-full h-20 rounded-xl object-cover" />
@@ -278,7 +299,7 @@ export default function FoodDecider({ foods, onConfirm, onRefresh }) {
             </motion.div>
           ) : filtered.map(food => (
             <motion.div key={food.id} layout initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95 }}
-              className="glass-card rounded-2xl p-3 flex items-center gap-3 cursor-pointer"
+              className="liquid-glass liquid-glass-interactive rounded-2xl p-3 flex items-center gap-3 cursor-pointer"
               onClick={() => setSelected(food)}>
               {food.anh
                 ? <img src={food.anh} alt={food.ten_mon} className="w-14 h-14 rounded-xl object-cover flex-shrink-0" />
@@ -288,7 +309,7 @@ export default function FoodDecider({ foods, onConfirm, onRefresh }) {
                 <p className="font-semibold text-sm truncate">{food.ten_mon}</p>
                 <div className="flex gap-1.5 mt-1 flex-wrap">
                   {[food.nhiet_do, food.kieu_an, food.quoc_tich].filter(Boolean).map(v => (
-                    <span key={v} className="text-xs px-2 py-0.5 rounded-full bg-secondary text-secondary-foreground">{v}</span>
+                    <span key={v} className="text-xs px-2 py-0.5 rounded-full liquid-glass-sm text-secondary-foreground">{v}</span>
                   ))}
                 </div>
               </div>

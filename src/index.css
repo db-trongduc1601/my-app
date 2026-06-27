@@ -29,28 +29,66 @@
 
     --font-body: 'Be Vietnam Pro', sans-serif;
     --font-display: 'Playfair Display', serif;
+
+    /* ── Liquid Glass Tokens (Light) ── */
+    --glass-bg: rgba(255, 255, 255, 0.45);
+    --glass-bg-heavy: rgba(255, 255, 255, 0.55);
+    --glass-bg-sm: rgba(255, 255, 255, 0.35);
+    --glass-border: rgba(255, 255, 255, 0.55);
+    --glass-border-subtle: rgba(255, 255, 255, 0.3);
+    --glass-shadow: rgba(180, 120, 140, 0.12);
+    --glass-shadow-heavy: rgba(180, 120, 140, 0.2);
+    --glass-highlight: rgba(255, 255, 255, 0.7);
+    --glass-highlight-subtle: rgba(255, 255, 255, 0.4);
+    --glass-glow: rgba(244, 114, 152, 0.25);
+    --glass-glow-strong: rgba(244, 114, 152, 0.4);
+
+    /* Mesh background blob colors */
+    --mesh-1: hsla(340, 80%, 78%, 0.35);
+    --mesh-2: hsla(20, 80%, 80%, 0.25);
+    --mesh-3: hsla(280, 60%, 82%, 0.2);
+    --mesh-4: hsla(340, 50%, 88%, 0.3);
   }
 
   .dark {
-    --background: 240 10% 8%;
+    --background: 240 15% 6%;
     --foreground: 340 10% 93%;
-    --card: 240 10% 11%;
+    --card: 240 12% 10%;
     --card-foreground: 340 10% 93%;
-    --popover: 240 10% 11%;
+    --popover: 240 12% 10%;
     --popover-foreground: 340 10% 93%;
     --primary: 340 97% 64%;
     --primary-foreground: 210 40% 98%;
-    --secondary: 240 8% 16%;
+    --secondary: 240 10% 14%;
     --secondary-foreground: 340 10% 80%;
-    --muted: 240 8% 14%;
+    --muted: 240 10% 12%;
     --muted-foreground: 340 8% 55%;
     --accent: 20 65% 55%;
     --accent-foreground: 0 0% 100%;
     --destructive: 0 62% 40%;
     --destructive-foreground: 0 0% 98%;
-    --border: 240 8% 20%;
-    --input: 240 8% 20%;
+    --border: 240 10% 18%;
+    --input: 240 10% 18%;
     --ring: 340 97% 64%;
+
+    /* ── Liquid Glass Tokens (Dark — Cosmic) ── */
+    --glass-bg: rgba(255, 255, 255, 0.06);
+    --glass-bg-heavy: rgba(255, 255, 255, 0.1);
+    --glass-bg-sm: rgba(255, 255, 255, 0.04);
+    --glass-border: rgba(255, 255, 255, 0.1);
+    --glass-border-subtle: rgba(255, 255, 255, 0.06);
+    --glass-shadow: rgba(0, 0, 0, 0.3);
+    --glass-shadow-heavy: rgba(0, 0, 0, 0.45);
+    --glass-highlight: rgba(255, 255, 255, 0.12);
+    --glass-highlight-subtle: rgba(255, 255, 255, 0.06);
+    --glass-glow: rgba(244, 114, 152, 0.2);
+    --glass-glow-strong: rgba(244, 114, 152, 0.35);
+
+    /* Mesh background blob colors (dark) */
+    --mesh-1: hsla(340, 60%, 30%, 0.2);
+    --mesh-2: hsla(260, 50%, 25%, 0.18);
+    --mesh-3: hsla(20, 50%, 25%, 0.15);
+    --mesh-4: hsla(300, 40%, 20%, 0.12);
   }
 }
 
@@ -58,21 +96,126 @@
   * {
     @apply border-border outline-ring/50;
   }
-  body {
+  html, body {
     @apply bg-background text-foreground font-body;
   }
 }
 
-.font-display { font-family: var(--font-display); }
-.font-body { font-family: var(--font-body); }
+/* ═══════════════════════════════════════════════════
+   LIQUID GLASS — Core Material System
+   ═══════════════════════════════════════════════════ */
 
+@layer components {
+/* ── Standard Liquid Glass ─────────────────────── */
+.liquid-glass {
+  background: var(--glass-bg);
+  backdrop-filter: blur(20px) saturate(1.6);
+  -webkit-backdrop-filter: blur(20px) saturate(1.6);
+  border: 1px solid var(--glass-border);
+  box-shadow:
+    0 8px 32px var(--glass-shadow),
+    inset 0 1px 0 var(--glass-highlight);
+  border-radius: 1.25rem;
+  position: relative;
+  contain: paint;
+  transition: box-shadow 0.3s ease, border-color 0.3s ease;
+}
+
+/* ── Small / Chip variant ──────────────────────── */
+.liquid-glass-sm {
+  background: var(--glass-bg-sm);
+  backdrop-filter: blur(12px) saturate(1.4);
+  -webkit-backdrop-filter: blur(12px) saturate(1.4);
+  border: 1px solid var(--glass-border-subtle);
+  box-shadow:
+    0 4px 16px var(--glass-shadow),
+    inset 0 1px 0 var(--glass-highlight-subtle);
+  border-radius: 0.75rem;
+  position: relative;
+  transition: box-shadow 0.3s ease, border-color 0.3s ease;
+}
+
+/* ── Heavy / Navigation variant ────────────────── */
+.liquid-glass-heavy {
+  background: var(--glass-bg-heavy);
+  backdrop-filter: blur(40px) saturate(1.8);
+  -webkit-backdrop-filter: blur(40px) saturate(1.8);
+  border: 1px solid var(--glass-border);
+  box-shadow:
+    0 12px 48px var(--glass-shadow-heavy),
+    inset 0 1px 0 var(--glass-highlight);
+  border-radius: 1.5rem;
+  position: relative;
+  contain: paint;
+  transition: box-shadow 0.3s ease, border-color 0.3s ease;
+}
+
+/* ── Glow on hover ─────────────────────────────── */
+.liquid-glow {
+  box-shadow:
+    0 8px 32px var(--glass-shadow),
+    0 0 20px var(--glass-glow),
+    inset 0 1px 0 var(--glass-highlight);
+}
+.liquid-glow-strong {
+  box-shadow:
+    0 12px 48px var(--glass-shadow-heavy),
+    0 0 32px var(--glass-glow-strong),
+    inset 0 1px 0 var(--glass-highlight);
+}
+
+/* ── Interactive glass (hover transitions) ─────── */
+.liquid-glass-interactive {
+  transition: transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.3s ease;
+}
+.liquid-glass-interactive:hover {
+  transform: translateY(-2px) scale(1.01);
+  box-shadow:
+    0 12px 40px var(--glass-shadow-heavy),
+    0 0 24px var(--glass-glow),
+    inset 0 1px 0 var(--glass-highlight);
+}
+.liquid-glass-interactive:active {
+  transform: translateY(0) scale(0.99);
+}
+
+/* ── Specular Rim Light (pseudo-element) ───────── */
+.rim-light::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 10%;
+  right: 10%;
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    var(--glass-highlight) 30%,
+    rgba(255, 255, 255, 0.9) 50%,
+    var(--glass-highlight) 70%,
+    transparent 100%
+  );
+  border-radius: 1px;
+  z-index: 1;
+  pointer-events: none;
+}
+
+/* ═══════════════════════════════════════════════════
+   BACKWARD COMPAT — Keep .glass-card working
+   ═══════════════════════════════════════════════════ */
 .glass-card {
-  @apply bg-white/70 backdrop-blur-md border border-white/40 shadow-lg;
-}
-.dark .glass-card {
-  @apply bg-white/5 border-white/10;
+  background: var(--glass-bg);
+  backdrop-filter: blur(20px) saturate(1.6);
+  -webkit-backdrop-filter: blur(20px) saturate(1.6);
+  border: 1px solid var(--glass-border);
+  box-shadow:
+    0 8px 32px var(--glass-shadow),
+    inset 0 1px 0 var(--glass-highlight);
 }
 
+/* ═══════════════════════════════════════════════════
+   GRADIENTS
+   ═══════════════════════════════════════════════════ */
 .gradient-rose {
   background: linear-gradient(135deg, hsl(340, 60%, 92%) 0%, hsl(20, 80%, 90%) 100%);
 }
@@ -84,11 +227,48 @@
   background: linear-gradient(135deg, hsl(340, 97%, 64%) 0%, hsl(20, 80%, 65%) 100%);
 }
 
-::-webkit-scrollbar { width: 4px; }
-::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: hsl(340, 40%, 80%); border-radius: 10px; }
-.dark ::-webkit-scrollbar-thumb { background: hsl(340, 20%, 35%); }
+.gradient-divider {
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    hsl(340, 40%, 80%) 30%,
+    hsl(340, 60%, 75%) 50%,
+    hsl(340, 40%, 80%) 70%,
+    transparent 100%
+  );
+  border: none;
+}
+.dark .gradient-divider {
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    hsl(340, 30%, 30%) 30%,
+    hsl(340, 40%, 35%) 50%,
+    hsl(340, 30%, 30%) 70%,
+    transparent 100%
+  );
+}
+}
 
+/* ═══════════════════════════════════════════════════
+   TYPOGRAPHY
+   ═══════════════════════════════════════════════════ */
+.font-display { font-family: var(--font-display); }
+.font-body { font-family: var(--font-body); }
+
+.text-glow {
+  text-shadow: 0 0 24px hsla(340, 97%, 64%, 0.3);
+}
+.dark .text-glow {
+  text-shadow: 0 0 32px hsla(340, 97%, 64%, 0.4);
+}
+
+/* ═══════════════════════════════════════════════════
+   ANIMATIONS
+   ═══════════════════════════════════════════════════ */
+
+/* Float — gentle vertical bobbing */
 .animate-float {
   animation: float 3s ease-in-out infinite;
 }
@@ -97,5 +277,295 @@
   50% { transform: translateY(-6px); }
 }
 
+/* Shimmer — light sweep across glass edge */
+.animate-shimmer::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 50%;
+  height: 100%;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.15) 50%,
+    transparent 100%
+  );
+  animation: shimmer 4s ease-in-out infinite;
+  pointer-events: none;
+  z-index: 2;
+  border-radius: inherit;
+}
+@keyframes shimmer {
+  0% { left: -100%; }
+  50% { left: 100%; }
+  100% { left: 100%; }
+}
+
+/* Blob drift — animated mesh background */
+@keyframes blob-drift-1 {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  25% { transform: translate(30px, -40px) scale(1.1); }
+  50% { transform: translate(-20px, 20px) scale(0.95); }
+  75% { transform: translate(15px, 30px) scale(1.05); }
+}
+@keyframes blob-drift-2 {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  33% { transform: translate(-35px, 25px) scale(1.08); }
+  66% { transform: translate(25px, -30px) scale(0.92); }
+}
+@keyframes blob-drift-3 {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  20% { transform: translate(20px, 35px) scale(1.05); }
+  50% { transform: translate(-30px, -15px) scale(0.98); }
+  80% { transform: translate(10px, -25px) scale(1.1); }
+}
+@keyframes blob-drift-4 {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  40% { transform: translate(-25px, -20px) scale(1.12); }
+  70% { transform: translate(20px, 15px) scale(0.9); }
+}
+
+.mesh-bg {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  overflow: hidden;
+  z-index: 0;
+}
+.mesh-blob {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(60px);
+  will-change: transform;
+}
+.mesh-blob-1 {
+  width: 320px;
+  height: 320px;
+  background: var(--mesh-1);
+  top: -80px;
+  right: -60px;
+  animation: blob-drift-1 35s ease-in-out infinite;
+}
+.mesh-blob-2 {
+  width: 260px;
+  height: 260px;
+  background: var(--mesh-2);
+  top: 30%;
+  left: -80px;
+  animation: blob-drift-2 42s ease-in-out infinite;
+}
+.mesh-blob-3 {
+  width: 200px;
+  height: 200px;
+  background: var(--mesh-3);
+  bottom: 15%;
+  right: -40px;
+  animation: blob-drift-3 38s ease-in-out infinite;
+}
+.mesh-blob-4 {
+  width: 240px;
+  height: 240px;
+  background: var(--mesh-4);
+  bottom: -60px;
+  left: 20%;
+  animation: blob-drift-4 45s ease-in-out infinite;
+}
+
+/* Float-up particles for login page */
+@keyframes float-up {
+  0% {
+    transform: translateY(100vh) scale(0);
+    opacity: 0;
+  }
+  10% {
+    opacity: 0.6;
+    transform: translateY(90vh) scale(0.5);
+  }
+  90% {
+    opacity: 0.3;
+  }
+  100% {
+    transform: translateY(-10vh) scale(1);
+    opacity: 0;
+  }
+}
+
+.particle {
+  position: absolute;
+  pointer-events: none;
+  font-size: 1rem;
+  animation: float-up linear infinite;
+  opacity: 0;
+}
+
+/* Glow pulse for active nav items */
+@keyframes glow-pulse {
+  0%, 100% { box-shadow: 0 0 12px var(--glass-glow), inset 0 1px 0 var(--glass-highlight); }
+  50% { box-shadow: 0 0 20px var(--glass-glow-strong), inset 0 1px 0 var(--glass-highlight); }
+}
+.animate-glow-pulse {
+  animation: glow-pulse 2.5s ease-in-out infinite;
+}
+
+/* ═══════════════════════════════════════════════════
+   SCROLLBAR
+   ═══════════════════════════════════════════════════ */
+::-webkit-scrollbar { width: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: hsl(340, 40%, 80%); border-radius: 10px; }
+.dark ::-webkit-scrollbar-thumb { background: hsl(340, 20%, 35%); }
+
 .no-scrollbar::-webkit-scrollbar { display: none; }
 .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+/* ═══════════════════════════════════════════════════
+   iOS-26 LIQUID GLASS — BOTTOM TAB BAR
+   Safari-safe implementation. See BottomNav.jsx for
+   the two Safari bug workaround comments.
+   ═══════════════════════════════════════════════════ */
+
+/* ── Glass panel (child of the fixed wrapper) ───── */
+.tabbar-glass {
+  /* Core glass */
+  background: rgba(255, 255, 255, 0.08);
+
+  /* Rule: blur ≤ 28px; also set -webkit- prefix for full Safari coverage */
+  -webkit-backdrop-filter: blur(26px) saturate(1.9);
+  backdrop-filter: blur(26px) saturate(1.9);
+
+  border: 1px solid rgba(255, 255, 255, 0.22);
+
+  box-shadow:
+    inset 0 1px 1px rgba(255, 255, 255, 0.55),   /* top edge highlight */
+    inset 0 -1px 8px rgba(0, 0, 0, 0.25),          /* bottom depth */
+    0 10px 40px rgba(0, 0, 0, 0.35);               /* drop shadow */
+
+  border-radius: 26px;
+  position: relative;
+  overflow: hidden;
+
+  /* CSS variables for specular highlight position */
+  --lx: 50%;
+  --ly: 0%;
+}
+
+/* Dark mode glass tint */
+.dark .tabbar-glass {
+  background: rgba(20, 10, 15, 0.45);
+  border-color: rgba(255, 255, 255, 0.12);
+  box-shadow:
+    inset 0 1px 1px rgba(255, 255, 255, 0.18),
+    inset 0 -1px 8px rgba(0, 0, 0, 0.55),
+    0 10px 40px rgba(0, 0, 0, 0.65);
+}
+
+/* ── Grain / noise texture overlay (::before) ─────
+   Uses a tiny SVG feTurbulence as a regular background-image.
+   This is safe in Safari — backdrop-filter: url() is NOT used here.
+   Opacity ~0.05 so it only adds micro-texture, not visible noise.     */
+.tabbar-glass::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='200' height='200' filter='url(%23n)' opacity='1'/%3E%3C/svg%3E");
+  background-size: 160px 160px;
+  opacity: 0.045;
+  mix-blend-mode: overlay;
+  pointer-events: none;
+  border-radius: inherit;
+  z-index: 0;
+}
+
+/* ── Moving specular highlight (::after) ──────────
+   Driven by --lx / --ly CSS variables set from
+   gyroscope (iOS) or mouse/touch (fallback).          */
+.tabbar-glass::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(
+    circle at var(--lx, 50%) var(--ly, 0%),
+    rgba(255, 255, 255, 0.32),
+    transparent 58%
+  );
+  pointer-events: none;
+  border-radius: inherit;
+  z-index: 0;
+  transition: background 0.08s linear;
+}
+
+/* ── Tab items container ────────────────────────── */
+.tabbar-items {
+  display: flex;
+  align-items: center;
+  justify-content: space-around;
+  padding: 6px 8px;
+  position: relative;
+  z-index: 1; /* above ::before and ::after pseudo-elements */
+}
+
+/* ── Individual tab item ────────────────────────── */
+.tabbar-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 8px 12px;
+  border-radius: 18px;
+  color: rgba(120, 80, 100, 0.7);
+  text-decoration: none;
+  transition: color 0.2s ease, background 0.2s ease, transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+  position: relative;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.dark .tabbar-item {
+  color: rgba(200, 150, 170, 0.6);
+}
+
+.tabbar-item:active {
+  transform: scale(0.92);
+}
+
+/* ── Active state ───────────────────────────────── */
+.tabbar-item--active {
+  color: hsl(340, 97%, 64%);
+  background: rgba(244, 114, 152, 0.15);
+  transform: scale(1.06);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.4),
+    0 0 12px rgba(244, 114, 152, 0.25);
+}
+
+.dark .tabbar-item--active {
+  color: hsl(340, 97%, 72%);
+  background: rgba(244, 114, 152, 0.2);
+}
+
+.tabbar-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+}
+
+/* ── Label (only visible when active) ────────────── */
+.tabbar-label {
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+  opacity: 0;
+  max-height: 0;
+  overflow: hidden;
+  transition: opacity 0.2s ease, max-height 0.2s ease;
+}
+
+.tabbar-label--visible {
+  opacity: 1;
+  max-height: 14px;
+}

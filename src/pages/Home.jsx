@@ -42,12 +42,12 @@ export default function Home() {
       {/* Header (Giữ nguyên 100%) */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="font-display text-2xl font-semibold text-foreground leading-tight">
+          <h1 className="font-display text-2xl font-semibold text-foreground leading-tight text-glow">
             Đức & Quỳnh 💕
           </h1>
           <p className="text-xs text-muted-foreground mt-0.5">không gian riêng của mình</p>
         </div>
-        <div className="w-10 h-10 rounded-full gradient-primary flex items-center justify-center shadow-md">
+        <div className="w-10 h-10 rounded-full gradient-primary flex items-center justify-center shadow-md animate-glow-pulse">
           <Heart size={18} className="text-white" fill="white" />
         </div>
       </div>

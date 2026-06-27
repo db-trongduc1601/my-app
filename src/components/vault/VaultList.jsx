@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { ExternalLink, Gift, Sparkles, Ruler, Plus, X, Loader2, Pencil, Trash2, Check } from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { base44 } from '@/api/base44Client';
+import { motion } from 'framer-motion';
+import { db } from '../../firebase';
+import { collection, doc, addDoc, updateDoc, deleteDoc } from 'firebase/firestore';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -39,7 +40,7 @@ function ItemForm({ initial, categories, onSave, onClose, title }) {
 
   return (
     <Dialog open onOpenChange={onClose}>
-      <DialogContent className="max-w-sm rounded-2xl">
+      <DialogContent className="max-w-sm rounded-2xl liquid-glass">
         <DialogHeader><DialogTitle>{title}</DialogTitle></DialogHeader>
         <div className="space-y-3 pt-1">
           <Input placeholder="Tên món đồ *" value={form.ten_mon_do} onChange={e => setForm(f => ({...f, ten_mon_do: e.target.value}))} />
@@ -82,7 +83,7 @@ function VaultItem({ item, onEdit, onDelete, onTogglePurchased }) {
 
   return (
     <motion.div layout initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }}
-      className={cn("glass-card rounded-2xl p-3 flex gap-3 items-start transition-opacity", item.da_mua && "opacity-50")}>
+      className={cn("liquid-glass liquid-glass-interactive rounded-2xl p-3 flex gap-3 items-start transition-opacity", item.da_mua && "opacity-50")}>
       {item.anh
         ? <img src={item.anh} alt={item.ten_mon_do} className="w-12 h-12 rounded-xl object-cover flex-shrink-0" />
         : <div className={cn("w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0", bg)}>
@@ -122,23 +123,44 @@ export default function VaultList({ items, onRefresh }) {
   const allCategories = [...new Set([...DEFAULT_CATEGORIES, ...customCategories])];
   const grouped = allCategories.reduce((acc, cat) => { acc[cat] = items.filter(i => i.phan_loai === cat); return acc; }, {});
 
-  const handleAdd = async (form) => {
-    await base44.entities.QuynhVault.create(form);
-    toast.success('💕 Đã thêm vào Vault!');
+  const handleAdd = async (formData) => {
+    try {
+      await addDoc(collection(db, 'vault_items'), formData);
+      toast.success('💕 Đã thêm vào Vault!');
+    } catch (error) {
+      console.error(error);
+      toast.error('Lỗi khi thêm đồ!');
+    }
     onRefresh?.();
   };
-  const handleEdit = async (form) => {
-    await base44.entities.QuynhVault.update(form.id, form);
-    toast.success('Đã cập nhật!');
+  const handleEdit = async (formData) => {
+    try {
+      const { id, ...data } = formData;
+      await updateDoc(doc(db, 'vault_items', id), data);
+      toast.success('Đã cập nhật!');
+    } catch (error) {
+      console.error(error);
+      toast.error('Lỗi khi sửa đồ!');
+    }
     onRefresh?.();
   };
   const handleDelete = async (id) => {
-    await base44.entities.QuynhVault.delete(id);
-    toast.success('Đã xóa');
+    try {
+      await deleteDoc(doc(db, 'vault_items', id));
+      toast.success('Đã xóa');
+    } catch (error) {
+      console.error(error);
+      toast.error('Lỗi khi xóa đồ!');
+    }
     onRefresh?.();
   };
   const handleTogglePurchased = async (item) => {
-    await base44.entities.QuynhVault.update(item.id, { da_mua: !item.da_mua });
+    try {
+      await updateDoc(doc(db, 'vault_items', item.id), { da_mua: !item.da_mua });
+    } catch (error) {
+      console.error(error);
+      toast.error('Lỗi khi thay đổi trạng thái!');
+    }
     onRefresh?.();
   };
 
@@ -161,7 +183,7 @@ export default function VaultList({ items, onRefresh }) {
             <div className="flex items-center gap-2 mb-3">
               <div className={cn("p-1.5 rounded-lg", bg)}><Icon size={13} className={color} /></div>
               <span className="font-semibold text-sm">{cat}</span>
-              <span className="text-xs text-muted-foreground bg-secondary px-2 py-0.5 rounded-full">{catItems.length}</span>
+              <span className="text-xs text-muted-foreground liquid-glass-sm px-2 py-0.5 rounded-full">{catItems.length}</span>
             </div>
             <div className="space-y-2 ml-1">
               {catItems.map(item => (

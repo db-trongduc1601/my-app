@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
 import { Star, Plus, Loader2, Zap, Pencil, Trash2, Flame } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { base44 } from '@/api/base44Client';
+import { db } from '../../firebase';
+import { collection, doc, addDoc, updateDoc, deleteDoc, getDocs } from 'firebase/firestore';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -20,7 +21,7 @@ function QuestFormDialog({ initial, onSave, onClose }) {
   };
   return (
     <Dialog open onOpenChange={onClose}>
-      <DialogContent className="max-w-xs rounded-2xl">
+      <DialogContent className="max-w-xs rounded-2xl liquid-glass">
         <DialogHeader><DialogTitle>{initial ? 'Sửa nhiệm vụ' : 'Thêm nhiệm vụ'}</DialogTitle></DialogHeader>
         <div className="space-y-3 pt-1">
           <Input placeholder="Tên nhiệm vụ..." value={form.ten_nhiem_vu} onChange={e => setForm(f => ({...f, ten_nhiem_vu: e.target.value}))} />
@@ -57,68 +58,101 @@ export default function QuestBoard({ quests, onUpdate, currentUser }) {
   }, [currentUser]);
 
   const loadStreak = async () => {
-    const records = await base44.entities.StreakData.list();
-    const mine = records.find(r => r.user_email === currentUser?.email);
-    if (mine) {
-      setStreak(mine.streak_count || 0);
-      setStreakRecord(mine);
+    try {
+      const querySnapshot = await getDocs(collection(db, 'streak_data'));
+      const mine = querySnapshot.docs
+        .map(doc => ({ id: doc.id, ...doc.data() }))
+        .find(r => r.user_email === currentUser?.email);
+      if (mine) {
+        setStreak(mine.streak_count || 0);
+        setStreakRecord(mine);
+      }
+    } catch (error) {
+      console.error(error);
     }
   };
 
   const handleToggle = async (quest) => {
     setToggling(quest.id);
     const completing = !quest.da_xong;
-    await base44.entities.QuestBoard.update(quest.id, { da_xong: completing });
+    try {
+      await updateDoc(doc(db, 'quests', quest.id), { da_xong: completing });
 
-    if (completing) {
-      toast.success(`⭐ +${quest.diem_exp} EXP!`);
-      // Anti-cheat: only add streak once per day
-      const today = todayStr();
-      if (streakRecord) {
-        if (streakRecord.last_claimed_date !== today) {
-          // New day — increment streak
-          const newStreak = (streakRecord.streak_count || 0) + 1;
-          await base44.entities.StreakData.update(streakRecord.id, {
-            streak_count: newStreak,
+      if (completing) {
+        toast.success(`⭐ +${quest.diem_exp} EXP!`);
+        // Anti-cheat: only add streak once per day
+        const today = todayStr();
+        if (streakRecord) {
+          if (streakRecord.last_claimed_date !== today) {
+            // New day — increment streak
+            const newStreak = (streakRecord.streak_count || 0) + 1;
+            await updateDoc(doc(db, 'streak_data', streakRecord.id), {
+              streak_count: newStreak,
+              last_claimed_date: today,
+            });
+            setStreak(newStreak);
+            setStreakRecord(prev => ({ ...prev, streak_count: newStreak, last_claimed_date: today }));
+            toast.success(`🔥 Streak ${newStreak} ngày!`);
+          }
+          // else: already claimed today, no change
+        } else if (currentUser) {
+          // First ever streak
+          const docRef = await addDoc(collection(db, 'streak_data'), {
+            user_email: currentUser.email,
+            streak_count: 1,
             last_claimed_date: today,
           });
-          setStreak(newStreak);
-          setStreakRecord(prev => ({ ...prev, streak_count: newStreak, last_claimed_date: today }));
-          toast.success(`🔥 Streak ${newStreak} ngày!`);
+          const rec = {
+            id: docRef.id,
+            user_email: currentUser.email,
+            streak_count: 1,
+            last_claimed_date: today,
+          };
+          setStreak(1);
+          setStreakRecord(rec);
+          toast.success('🔥 Streak 1 ngày!');
         }
-        // else: already claimed today, no change
-      } else if (currentUser) {
-        // First ever streak
-        const rec = await base44.entities.StreakData.create({
-          user_email: currentUser.email,
-          streak_count: 1,
-          last_claimed_date: today,
-        });
-        setStreak(1);
-        setStreakRecord(rec);
-        toast.success('🔥 Streak 1 ngày!');
       }
+    } catch (error) {
+      console.error(error);
+      toast.error('Lỗi khi cập nhật trạng thái nhiệm vụ!');
     }
 
     setToggling(null);
     onUpdate?.();
   };
 
-  const handleAdd = async (form) => {
-    await base44.entities.QuestBoard.create({ ...form, da_xong: false });
-    toast.success('Quest mới!');
+  const handleAdd = async (formData) => {
+    try {
+      await addDoc(collection(db, 'quests'), { ...formData, da_xong: false });
+      toast.success('Quest mới!');
+    } catch (error) {
+      console.error(error);
+      toast.error('Lỗi thêm quest!');
+    }
     onUpdate?.();
   };
 
-  const handleEdit = async (form) => {
-    await base44.entities.QuestBoard.update(form.id, form);
-    toast.success('Đã cập nhật!');
+  const handleEdit = async (formData) => {
+    try {
+      const { id, ...data } = formData;
+      await updateDoc(doc(db, 'quests', id), data);
+      toast.success('Đã cập nhật!');
+    } catch (error) {
+      console.error(error);
+      toast.error('Lỗi sửa quest!');
+    }
     onUpdate?.();
   };
 
   const handleDelete = async (id) => {
     setDeleting(id);
-    await base44.entities.QuestBoard.delete(id);
+    try {
+      await deleteDoc(doc(db, 'quests', id));
+    } catch (error) {
+      console.error(error);
+      toast.error('Lỗi xóa quest!');
+    }
     setDeleting(null);
     onUpdate?.();
   };
@@ -126,13 +160,13 @@ export default function QuestBoard({ quests, onUpdate, currentUser }) {
   return (
     <div className="space-y-4">
       {/* Streak + EXP Bar */}
-      <div className="glass-card rounded-2xl p-4 space-y-3">
+      <div className="liquid-glass rim-light rounded-2xl p-4 space-y-3">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Flame size={18} className="text-orange-500" />
             <span className="text-sm font-semibold">Streak</span>
           </div>
-          <div className="flex items-center gap-1.5 bg-orange-50 dark:bg-orange-900/20 px-3 py-1 rounded-full">
+          <div className="flex items-center gap-1.5 liquid-glass-sm px-3 py-1 rounded-full">
             <span className="text-lg">🔥</span>
             <span className="text-sm font-bold text-orange-600 dark:text-orange-400">{streak} ngày</span>
           </div>
@@ -142,7 +176,7 @@ export default function QuestBoard({ quests, onUpdate, currentUser }) {
             <div className="flex items-center gap-2"><Zap size={15} className="text-yellow-500" /><span className="text-sm font-semibold">Tổng EXP</span></div>
             <span className="text-sm font-bold text-primary">{totalExp} / {maxExp} XP</span>
           </div>
-          <div className="w-full h-2 bg-secondary rounded-full overflow-hidden">
+          <div className="w-full h-2 liquid-glass-sm rounded-full overflow-hidden">
             <motion.div className="h-full gradient-primary rounded-full" initial={{ width: 0 }}
               animate={{ width: `${progress}%` }} transition={{ duration: 0.5 }} />
           </div>
@@ -161,7 +195,7 @@ export default function QuestBoard({ quests, onUpdate, currentUser }) {
         <AnimatePresence>
           {quests.map(quest => (
             <motion.div key={quest.id} layout initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-              className={cn("glass-card rounded-2xl p-3 flex items-center gap-3", quest.da_xong && "opacity-60")}>
+              className={cn("liquid-glass liquid-glass-interactive rounded-2xl p-3 flex items-center gap-3", quest.da_xong && "opacity-60")}>
               <button onClick={() => handleToggle(quest)} disabled={toggling === quest.id}
                 className={cn("w-6 h-6 rounded-full flex-shrink-0 flex items-center justify-center border-2 transition-all",
                   quest.da_xong ? "bg-primary border-primary" : "border-border")}>
@@ -173,7 +207,7 @@ export default function QuestBoard({ quests, onUpdate, currentUser }) {
                 <p className={cn("text-sm font-medium truncate", quest.da_xong && "line-through text-muted-foreground")}>{quest.ten_nhiem_vu}</p>
               </div>
               <span className={cn("text-xs font-bold px-2 py-1 rounded-lg flex-shrink-0",
-                quest.da_xong ? "bg-primary/10 text-primary" : "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400")}>
+                quest.da_xong ? "bg-primary/10 text-primary" : "liquid-glass-sm text-yellow-700 dark:text-yellow-400")}>
                 +{quest.diem_exp} XP
               </span>
               <button onClick={() => setEditQuest(quest)} className="text-muted-foreground hover:text-foreground transition-colors flex-shrink-0">
