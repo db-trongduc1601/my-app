@@ -8,15 +8,16 @@ import UserNotRegisteredError from '@/components/UserNotRegisteredError';
 import { ThemeProvider } from '@/lib/ThemeContext';
 import Layout from '@/components/Layout';
 import Home from '@/pages/Home';
-import Food from '@/pages/Food';
-import Vault from '@/pages/Vault';
-import Quests from '@/pages/Quests';
-import Entertainment from '@/pages/Entertainment';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, lazy, Suspense } from 'react';
 import { auth } from './firebase';
 import Login from './pages/Login';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
 import { useNotifications } from '@/hooks/useNotifications';
+
+const Food = lazy(() => import('@/pages/Food'));
+const Vault = lazy(() => import('@/pages/Vault'));
+const Quests = lazy(() => import('@/pages/Quests'));
+const Entertainment = lazy(() => import('@/pages/Entertainment'));
 
 const AuthenticatedApp = () => {
   const { user, isLoadingAuth, isLoadingPublicSettings, authError, navigateToLogin } = useAuth();
@@ -36,16 +37,22 @@ const AuthenticatedApp = () => {
   }
 
   return (
-    <Routes>
-      <Route element={<Layout />}>
-        <Route path="/" element={<Home />} />
-        <Route path="/food" element={<Food />} />
-        <Route path="/vault" element={<Vault />} />
-        <Route path="/quests" element={<Quests />} />
-        <Route path="/entertainment" element={<Entertainment />} />
-      </Route>
-      <Route path="*" element={<PageNotFound />} />
-    </Routes>
+    <Suspense fallback={
+      <div className="fixed inset-0 flex items-center justify-center bg-background/50 backdrop-blur-sm z-50">
+        <div className="w-8 h-8 border-4 border-pink-200 border-t-primary rounded-full animate-spin"></div>
+      </div>
+    }>
+      <Routes>
+        <Route element={<Layout />}>
+          <Route path="/" element={<Home />} />
+          <Route path="/food" element={<Food />} />
+          <Route path="/vault" element={<Vault />} />
+          <Route path="/quests" element={<Quests />} />
+          <Route path="/entertainment" element={<Entertainment />} />
+        </Route>
+        <Route path="*" element={<PageNotFound />} />
+      </Routes>
+    </Suspense>
   );
 };
 

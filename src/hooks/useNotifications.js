@@ -5,12 +5,8 @@ import { getMessaging, getToken, isSupported } from 'firebase/messaging';
 import { toast } from '@/components/ui/use-toast';
 
 // Hàm đăng ký và lưu FCM Token lên Firestore
-export async function registerFCMToken(currentUser, options = {}) {
-  const { suppressToast = false, force = false } = options;
-  if (!currentUser?.email) return;
-
-  const storageKey = typeof window !== 'undefined' ? `fcm_registered_${encodeURIComponent(currentUser.email)}` : null;
-  if (!force && storageKey && sessionStorage.getItem(storageKey) === '1') return;
+export async function registerFCMToken(currentUser, showToast = false) {
+  if (!currentUser || !currentUser.email) return;
   
   try {
     // Chỉ đăng ký nếu trình duyệt hỗ trợ thông báo và người dùng đã cấp quyền
@@ -19,11 +15,13 @@ export async function registerFCMToken(currentUser, options = {}) {
     const messagingSupported = await isSupported();
     if (!messagingSupported) {
       console.log("Trình duyệt không hỗ trợ Firebase Messaging.");
-      toast({
-        variant: "destructive",
-        title: "Không hỗ trợ Push",
-        description: "Trình duyệt của bạn không hỗ trợ công nghệ Web Push."
-      });
+      if (showToast) {
+        toast({
+          variant: "destructive",
+          title: "Không hỗ trợ Push",
+          description: "Trình duyệt của bạn không hỗ trợ công nghệ Web Push."
+        });
+      }
       return;
     }
 
@@ -31,11 +29,13 @@ export async function registerFCMToken(currentUser, options = {}) {
     const vapidKey = import.meta.env.VITE_FIREBASE_VAPID_KEY;
     if (!vapidKey) {
       console.warn("Thiếu VITE_FIREBASE_VAPID_KEY trong .env.local!");
-      toast({
-        variant: "destructive",
-        title: "Lỗi cấu hình",
-        description: "Ứng dụng chưa được cấu hình mã khóa VAPID Key để gửi đẩy."
-      });
+      if (showToast) {
+        toast({
+          variant: "destructive",
+          title: "Lỗi cấu hình",
+          description: "Ứng dụng chưa được cấu hình mã khóa VAPID Key để gửi đẩy."
+        });
+      }
       return;
     }
 
@@ -55,9 +55,8 @@ export async function registerFCMToken(currentUser, options = {}) {
         updated_at: serverTimestamp()
       }, { merge: true });
       console.log("Đã đăng ký FCM Token thành công:", token);
-      if (storageKey) sessionStorage.setItem(storageKey, '1');
       
-      if (!suppressToast) {
+      if (showToast) {
         toast({
           title: "Đã đăng ký thiết bị! 📲",
           description: "Hệ thống thông báo đẩy đã sẵn sàng nhận tin nhắn.",
@@ -66,7 +65,7 @@ export async function registerFCMToken(currentUser, options = {}) {
       }
     } else {
       console.warn("Không nhận được token FCM thiết bị.");
-      if (!suppressToast) {
+      if (showToast) {
         toast({
           variant: "destructive",
           title: "Không lấy được Token",
@@ -76,7 +75,7 @@ export async function registerFCMToken(currentUser, options = {}) {
     }
   } catch (error) {
     console.error("Lỗi đăng ký FCM Token:", error);
-    if (!suppressToast) {
+    if (showToast) {
       toast({
         variant: "destructive",
         title: "Lỗi đăng ký thông báo",

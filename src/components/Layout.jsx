@@ -41,7 +41,7 @@ export default function Layout() {
         });
         
         // Đăng ký thiết bị nhận thông báo đẩy FCM ngay lập tức
-        registerFCMToken(auth.currentUser, { suppressToast: false });
+        registerFCMToken(auth.currentUser, true);
         
         // Gửi thử một thông báo test để xác nhận hoạt động
         if ('serviceWorker' in navigator) {

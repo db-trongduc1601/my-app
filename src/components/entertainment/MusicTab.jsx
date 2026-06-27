@@ -21,7 +21,7 @@ function getYoutubeThumbnail(url) {
 }
 
 /* ── Vinyl Player ──────────────────────────────────── */
-function VinylPlayer({ track, isPlaying, onTogglePlay, iframeRef, audioRef }) {
+function VinylPlayer({ track, isPlaying, onTogglePlay, iframeRef, audioRef, onIframeLoad }) {
   const isYoutube = track?.loai === 'link' && getYoutubeEmbed(track?.url);
   const isUpload = track?.loai === 'upload';
 
@@ -39,6 +39,9 @@ function VinylPlayer({ track, isPlaying, onTogglePlay, iframeRef, audioRef }) {
             animation: isPlaying ? 'vinyl-spin 3s linear infinite' : 'none',
             position: 'relative',
             overflow: 'hidden',
+            willChange: 'transform',
+            transform: 'translate3d(0, 0, 0)',
+            backfaceVisibility: 'hidden',
           }}
         >
           {/* Grooves */}
@@ -160,19 +163,12 @@ function VinylPlayer({ track, isPlaying, onTogglePlay, iframeRef, audioRef }) {
       {/* Hidden YouTube iframe (stays in DOM for audio continuity) */}
       {isYoutube && (
         <iframe
-          key={track.id}
           ref={iframeRef}
           src={getYoutubeEmbed(track.url, true)}
           style={{ position: 'absolute', width: 1, height: 1, opacity: 0, pointerEvents: 'none', top: -9999 }}
           allow="autoplay; encrypted-media"
           allowFullScreen
-          onLoad={() => {
-            setIframeReady(true);
-            if (isPlaying) {
-              sendYouTubeCommand('playVideo');
-              setTimeout(() => sendYouTubeCommand('playVideo'), 250);
-            }
-          }}
+          onLoad={onIframeLoad}
         />
       )}
 
@@ -367,6 +363,13 @@ export default function MusicTab({ tracks, onRefresh }) {
             onTogglePlay={handleTogglePlay}
             iframeRef={iframeRef}
             audioRef={audioRef}
+            onIframeLoad={() => {
+              setIframeReady(true);
+              if (isPlaying) {
+                sendYouTubeCommand('playVideo');
+                setTimeout(() => sendYouTubeCommand('playVideo'), 250);
+              }
+            }}
           />
         </div>
 
