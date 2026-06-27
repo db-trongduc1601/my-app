@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { db } from '../../firebase';
-import { collection, addDoc, doc, updateDoc, deleteDoc, getDocs, query, where } from 'firebase/firestore';
+import { collection, addDoc, doc, updateDoc, deleteDoc, getDocs, getDoc, query, where } from 'firebase/firestore';
 import { X, Copy, Check, UserPlus, Trash2, Loader2, MessageCircle, Pencil, Clock, UserCheck, UserX } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -167,8 +167,11 @@ export default function FriendsSidebar({ open, onClose, currentUser }) {
 
   const removeFriendRecords = async (record) => {
     const friendEmail = record.owner_email === currentUser.email ? record.friend_email : record.owner_email;
-    const q = query(collection(db, 'friends'), where('owner_email', '==', currentUser.email));
-    const snapshot = await getDocs(q);
+    const candidatesQuery = query(
+      collection(db, 'friends'),
+      where('owner_email', 'in', [currentUser.email, friendEmail])
+    );
+    const snapshot = await getDocs(candidatesQuery);
     const records = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 
     const toDelete = records.filter(r => (
@@ -179,8 +182,18 @@ export default function FriendsSidebar({ open, onClose, currentUser }) {
     await Promise.all(toDelete.map(r => deleteDoc(doc(db, 'friends', r.id))));
   };
 
-  const handleDelete = async (record) => {
+  const handleDelete = async (recordOrId) => {
     try {
+      let record = recordOrId;
+      if (typeof recordOrId === 'string') {
+        const docRef = doc(db, 'friends', recordOrId);
+        const docSnap = await getDoc(docRef);
+        record = docSnap.exists() ? { id: docSnap.id, ...docSnap.data() } : null;
+        if (!record) {
+          throw new Error('Không tìm thấy bản ghi bạn bè');
+        }
+      }
+
       await removeFriendRecords(record);
       toast.success('Đã xóa bạn');
       loadData();
