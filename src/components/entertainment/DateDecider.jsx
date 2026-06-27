@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useRef, useEffect, useLayoutEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { MapPin, Clock, Ticket, RefreshCw, Plus, X, Loader2 } from 'lucide-react';
 import { db } from '../../firebase';
@@ -59,7 +59,7 @@ function ScratchOverlay({ onRevealed }) {
   const [opacity, setOpacity] = useState(1);
   const [removed, setRemoved] = useState(false);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     
