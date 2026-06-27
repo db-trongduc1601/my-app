@@ -15,6 +15,11 @@ function getYoutubeEmbed(url, autoplay = false) {
   return `https://www.youtube.com/embed/${match[1]}?enablejsapi=1${autoplay ? '&autoplay=1' : ''}`;
 }
 
+function getYoutubeThumbnail(url) {
+  const match = url?.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([a-zA-Z0-9_-]+)/);
+  return match ? `https://img.youtube.com/vi/${match[1]}/hqdefault.jpg` : null;
+}
+
 /* ── Vinyl Player ──────────────────────────────────── */
 function VinylPlayer({ track, isPlaying, onTogglePlay, iframeRef, audioRef }) {
   const isYoutube = track?.loai === 'link' && getYoutubeEmbed(track?.url);
@@ -185,8 +190,10 @@ export default function MusicTab({ tracks, onRefresh }) {
   const [mode, setMode] = useState('link');
   const [form, setForm] = useState({ ten_bai: '', nghe_si: '', url: '', ghi_chu: '', anh_bia: '' });
   const [file, setFile] = useState(null);
+  const [coverFile, setCoverFile] = useState(null);
   const [saving, setSaving] = useState(false);
   const fileRef = useRef();
+  const coverFileRef = useRef();
   const iframeRef = useRef();
   const audioRef = useRef();
   const prevTrackId = useRef(null);
@@ -253,6 +260,8 @@ export default function MusicTab({ tracks, onRefresh }) {
     setSaving(true);
     try {
       let url = form.url;
+      let anh_bia = form.anh_bia;
+
       if (mode === 'upload' && file) {
         const fileExt = file.name ? file.name.split('.').pop() : 'mp3';
         const fileName = `music_tracks/${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExt}`;
@@ -260,15 +269,29 @@ export default function MusicTab({ tracks, onRefresh }) {
         await uploadBytes(storageRef, file);
         url = await getDownloadURL(storageRef);
       }
+
+      if (coverFile) {
+        const imgExt = coverFile.name ? coverFile.name.split('.').pop() : 'jpg';
+        const imgName = `music_covers/${Date.now()}_${Math.random().toString(36).substring(7)}.${imgExt}`;
+        const imgRef = ref(storage, imgName);
+        await uploadBytes(imgRef, coverFile);
+        anh_bia = await getDownloadURL(imgRef);
+      } else if (mode === 'link' && !anh_bia) {
+        const ytThumb = getYoutubeThumbnail(url);
+        if (ytThumb) anh_bia = ytThumb;
+      }
+
       await addDoc(collection(db, 'music_tracks'), {
         ...form,
         url,
+        anh_bia,
         loai: mode,
         created_date: new Date().toISOString()
       });
       toast.success('🎵 Đã thêm bài hát!');
       setForm({ ten_bai: '', nghe_si: '', url: '', ghi_chu: '', anh_bia: '' });
       setFile(null);
+      setCoverFile(null);
       setShowForm(false);
       onRefresh?.();
     } catch (error) {
@@ -356,7 +379,39 @@ export default function MusicTab({ tracks, onRefresh }) {
                   <input ref={fileRef} type="file" accept="audio/*,video/*" className="hidden" onChange={e => setFile(e.target.files[0])} />
                 </div>
               )}
-              <Input placeholder="URL ảnh bìa (tuỳ chọn)" value={form.anh_bia} onChange={e => setForm(f => ({...f, anh_bia: e.target.value}))} />
+              <div className="space-y-1">
+                <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-widest px-1">Ảnh bìa bài hát (tùy chọn)</p>
+                <div className="flex gap-2">
+                  <Input 
+                    placeholder={coverFile ? coverFile.name : "Dán URL ảnh hoặc nhấn nút tải lên..."} 
+                    value={form.anh_bia} 
+                    onChange={e => setForm(f => ({...f, anh_bia: e.target.value}))}
+                    className="flex-1"
+                    disabled={!!coverFile}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => coverFileRef.current.click()}
+                    className="px-3 py-2 liquid-glass-sm rounded-xl text-xs font-semibold hover:bg-primary hover:text-white transition-all flex items-center gap-1.5 flex-shrink-0"
+                  >
+                    <Upload size={12} />
+                    {coverFile ? 'Đã chọn' : 'Tải ảnh'}
+                  </button>
+                  <input 
+                    ref={coverFileRef} 
+                    type="file" 
+                    accept="image/*" 
+                    className="hidden" 
+                    onChange={e => {
+                      const selected = e.target.files[0];
+                      if (selected) {
+                        setCoverFile(selected);
+                        setForm(f => ({ ...f, anh_bia: '' })); // clear manually typed URL to prioritize upload
+                      }
+                    }} 
+                  />
+                </div>
+              </div>
               <Input placeholder="Ghi chú vibe... (tuỳ chọn)" value={form.ghi_chu} onChange={e => setForm(f => ({...f, ghi_chu: e.target.value}))} />
               <Button onClick={handleSave} disabled={saving || !form.ten_bai || (mode === 'link' && !form.url) || (mode === 'upload' && !file)}
                 className="w-full gradient-primary text-white border-0 rounded-xl">

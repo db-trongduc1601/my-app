@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { toast } from 'sonner';
 import { db } from '../../firebase';
 import { collection, addDoc, query, onSnapshot, where, or, and, doc, setDoc, updateDoc, FieldPath, writeBatch } from 'firebase/firestore';
 import { ArrowLeft } from 'lucide-react';
@@ -34,6 +35,7 @@ export default function ChatWindow({ friend, currentUser, onBack }) {
       setMessages(sorted.slice(-100));
     }, (error) => {
       console.error("Firestore onSnapshot error:", error);
+      toast.error("Không thể tải tin nhắn. Hãy mở Console kiểm tra xem có thiếu index không nhé!");
     });
 
     const qTyping = query(collection(db, 'typing_status'), where('channelId', '==', channelId), where('userEmail', '==', friend.friend_email));
