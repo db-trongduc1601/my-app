@@ -16,6 +16,7 @@ export const AuthProvider = ({ children }) => {
   // Unread messages state
   const [totalUnreadCount, setTotalUnreadCount] = useState(0);
   const [unreadCountBySender, setUnreadCountBySender] = useState({});
+  const [globalUnreadCount, setGlobalUnreadCount] = useState(0);
 
   // Kích hoạt heartbeat presence
   usePresenceHeartbeat(user);
@@ -61,28 +62,70 @@ export const AuthProvider = ({ children }) => {
         unreadUnsubscribe();
       }
       if (currentUser && currentUser.email) {
-        const q = query(
+        const myEmail = currentUser.email.toLowerCase();
+
+        // 1. Private messages
+        const qPrivate = query(
           collection(db, 'messages'),
-          where('receiver_email', '==', currentUser.email.toLowerCase()),
+          where('receiver_email', '==', myEmail),
           where('status', 'in', ['sent', 'delivered'])
         );
-        unreadUnsubscribe = onSnapshot(q, (snapshot) => {
-          let total = 0;
-          const breakdown = {};
+
+        // 2. Global messages
+        const qGlobal = query(
+          collection(db, 'messages'),
+          where('receiver_email', '==', 'global'),
+          where('status', 'in', ['sent', 'delivered'])
+        );
+
+        let privateUnread = 0;
+        let globalUnread = 0;
+        let privateBreakdown = {};
+
+        const updateCounts = (pUnread, pBreakdown, gUnread) => {
+          setTotalUnreadCount(pUnread + gUnread);
+          setGlobalUnreadCount(gUnread);
+          setUnreadCountBySender({
+            ...pBreakdown,
+            global: gUnread
+          });
+        };
+
+        const unsubPrivate = onSnapshot(qPrivate, (snapshot) => {
+          privateUnread = 0;
+          privateBreakdown = {};
           snapshot.forEach(doc => {
             const sender = doc.data().sender_email?.toLowerCase();
             if (sender) {
-              breakdown[sender] = (breakdown[sender] || 0) + 1;
-              total++;
+              privateBreakdown[sender] = (privateBreakdown[sender] || 0) + 1;
+              privateUnread++;
             }
           });
-          setTotalUnreadCount(total);
-          setUnreadCountBySender(breakdown);
+          updateCounts(privateUnread, privateBreakdown, globalUnread);
         }, (err) => {
-          console.error("Lỗi lấy unread messages:", err);
+          console.error("Lỗi lấy private unread messages:", err);
         });
+
+        const unsubGlobal = onSnapshot(qGlobal, (snapshot) => {
+          globalUnread = 0;
+          snapshot.forEach(doc => {
+            const sender = doc.data().sender_email?.toLowerCase();
+            if (sender && sender !== myEmail) {
+              globalUnread++;
+            }
+          });
+          updateCounts(privateUnread, privateBreakdown, globalUnread);
+        }, (err) => {
+          console.error("Lỗi lấy global unread messages:", err);
+        });
+
+        unreadUnsubscribe = () => {
+          unsubPrivate();
+          unsubGlobal();
+        };
       } else {
         setTotalUnreadCount(0);
+        setGlobalUnreadCount(0);
         setUnreadCountBySender({});
       }
 
@@ -132,7 +175,8 @@ export const AuthProvider = ({ children }) => {
       checkUserAuth,
       checkAppState,
       totalUnreadCount,
-      unreadCountBySender
+      unreadCountBySender,
+      globalUnreadCount
     }}>
       {children}
     </AuthContext.Provider>

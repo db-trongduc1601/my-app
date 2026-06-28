@@ -124,7 +124,14 @@ const MessageBubbleComponent = ({
   };
 
   const resolveAvatar = (email) => {
+    if (!email) return null;
     return profiles[email.toLowerCase()]?.photo_url;
+  };
+
+  const getOtherUserEmail = () => {
+    const keys = Object.keys(profiles);
+    const lowerMe = currentUserEmail?.toLowerCase();
+    return keys.find(k => k !== lowerMe) || '';
   };
 
   return (
@@ -306,11 +313,14 @@ const MessageBubbleComponent = ({
                 )}
                 {message.status === 'read' && isLastRead && (
                   <div className="w-3.5 h-3.5 rounded-full overflow-hidden flex items-center justify-center bg-secondary text-[7px] font-bold text-white ring-1 ring-white/10 flex-shrink-0">
-                    {resolveAvatar(message.receiver_email) ? (
-                      <img src={resolveAvatar(message.receiver_email)} alt="seen" className="w-full h-full object-cover" />
-                    ) : (
-                      resolveName(message.receiver_email)?.[0]?.toUpperCase() || '?'
-                    )}
+                    {(() => {
+                      const readerEmail = message.receiver_email === 'global' ? getOtherUserEmail() : message.receiver_email;
+                      return resolveAvatar(readerEmail) ? (
+                        <img src={resolveAvatar(readerEmail)} alt="seen" className="w-full h-full object-cover" />
+                      ) : (
+                        resolveName(readerEmail)?.[0]?.toUpperCase() || '?'
+                      );
+                    })()}
                   </div>
                 )}
               </div>

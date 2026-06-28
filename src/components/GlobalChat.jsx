@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { db } from '../firebase';
-import { collection, addDoc, query, where, onSnapshot, doc, setDoc, updateDoc, FieldPath, deleteField, serverTimestamp } from 'firebase/firestore';
+import { collection, addDoc, query, where, onSnapshot, doc, setDoc, updateDoc, FieldPath, deleteField, serverTimestamp, writeBatch } from 'firebase/firestore';
 import { X, MessageCircle } from 'lucide-react';
 import { motion } from 'framer-motion';
 import MessageBubble from '@/components/ui/MessageBubble';
@@ -30,6 +30,28 @@ export default function GlobalChat({ open, onClose, currentUser }) {
     if (dateVal instanceof Date) return dateVal.getTime();
     return Date.now();
   };
+
+  // Mark unread messages as read (Optimized with Batch)
+  useEffect(() => {
+    if (!currentUser) return;
+    const unreadMessages = messages.filter(m => m.receiver_email === 'global' && m.sender_email !== currentUser.email && m.status !== 'read');
+    if (unreadMessages.length === 0) return;
+
+    const markAsRead = async () => {
+      try {
+        const batch = writeBatch(db);
+        unreadMessages.forEach(m => {
+          const msgRef = doc(db, 'messages', m.id);
+          batch.update(msgRef, { status: 'read' });
+        });
+        await batch.commit();
+      } catch (e) {
+        console.error("Lỗi update batch status global:", e);
+      }
+    };
+    
+    markAsRead();
+  }, [messages, currentUser]);
 
   useEffect(() => {
     if (!open) return;
@@ -126,6 +148,7 @@ export default function GlobalChat({ open, onClose, currentUser }) {
         receiver_email: 'global',
         content: textContent,
         created_date: serverTimestamp(),
+        status: 'sent',
         ...(imageUrl && { imageUrl }),
         ...(videoUrl && { videoUrl }),
         ...(voiceUrl && { voiceUrl })
@@ -250,46 +273,53 @@ export default function GlobalChat({ open, onClose, currentUser }) {
               <p className="text-xs mt-1">Hãy là người đầu tiên nhắn!</p>
             </div>
           )}
-          {messages.map((m, i) => {
-            const isMe = m.sender_email === currentUser?.email;
-            const name = getDisplayName(m.sender_email);
-            const color = getColor(m.sender_email);
-            const prevMsg = messages[i - 1];
-            const nextMsg = messages[i + 1];
-            
-            const isFirst = prevMsg?.sender_email !== m.sender_email;
-            const isLast = nextMsg?.sender_email !== m.sender_email;
-            const showAvatar = !isMe && isLast;
+          {(() => {
+            const lastReadMessageId = [...messages]
+              .reverse()
+              .find(m => m.sender_email === currentUser?.email && m.status === 'read')?.id;
 
-            let msgObj = m;
-            if (msgObj.replyTo && !msgObj.replyTo.sender_email) {
-              const orig = messages.find(x => x.id === msgObj.replyTo.id);
-              if (orig) {
-                msgObj = { ...m, replyTo: { ...m.replyTo, sender_email: orig.sender_email } };
+            return messages.map((m, i) => {
+              const isMe = m.sender_email === currentUser?.email;
+              const name = getDisplayName(m.sender_email);
+              const color = getColor(m.sender_email);
+              const prevMsg = messages[i - 1];
+              const nextMsg = messages[i + 1];
+              
+              const isFirst = prevMsg?.sender_email !== m.sender_email;
+              const isLast = nextMsg?.sender_email !== m.sender_email;
+              const showAvatar = !isMe && isLast;
+
+              let msgObj = m;
+              if (msgObj.replyTo && !msgObj.replyTo.sender_email) {
+                const orig = messages.find(x => x.id === msgObj.replyTo.id);
+                if (orig) {
+                  msgObj = { ...m, replyTo: { ...m.replyTo, sender_email: orig.sender_email } };
+                }
               }
-            }
 
-            return (
-              <MessageBubble
-                key={m.id}
-                message={msgObj}
-                isMe={isMe}
-                senderName={!isMe ? name : undefined}
-                showAvatar={showAvatar}
-                avatarUrl={!isMe ? profiles[m.sender_email]?.photo_url : undefined}
-                avatarColor={color}
-                onReact={handleReact}
-                onUnsend={handleUnsend}
-                onReply={handleReply}
-                isFirst={isFirst}
-                isLast={isLast}
-                onScrollToReplied={handleScrollToMessage}
-                profiles={profiles}
-                friendNicknames={friendNicknames}
-                currentUserEmail={currentUser?.email}
-              />
-            );
-          })}
+              return (
+                <MessageBubble
+                  key={m.id}
+                  message={msgObj}
+                  isMe={isMe}
+                  senderName={!isMe ? name : undefined}
+                  showAvatar={showAvatar}
+                  avatarUrl={!isMe ? profiles[m.sender_email]?.photo_url : undefined}
+                  avatarColor={color}
+                  onReact={handleReact}
+                  onUnsend={handleUnsend}
+                  onReply={handleReply}
+                  isFirst={isFirst}
+                  isLast={isLast}
+                  onScrollToReplied={handleScrollToMessage}
+                  profiles={profiles}
+                  friendNicknames={friendNicknames}
+                  currentUserEmail={currentUser?.email}
+                  isLastRead={m.id === lastReadMessageId}
+                />
+              );
+            });
+          })()}
           <div ref={bottomRef} />
         </div>
 
