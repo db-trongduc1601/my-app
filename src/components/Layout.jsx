@@ -50,8 +50,8 @@ export default function Layout() {
       if (permission === 'granted') {
         setShowNotificationPrompt(false);
         toast({
-          title: "Đã bật thông báo! 💕",
-          description: "Bạn sẽ nhận được thông báo đẩy thời gian thực từ người ấy.",
+          title: "Đã bật thông báo!",
+          description: "Bạn sẽ nhận được thông báo đẩy thời gian thực từ bạn bè.",
         });
         
         // Đăng ký thiết bị nhận thông báo đẩy FCM ngay lập tức
@@ -60,15 +60,15 @@ export default function Layout() {
         // Gửi thử một thông báo test để xác nhận hoạt động
         if ('serviceWorker' in navigator) {
           const reg = await navigator.serviceWorker.ready;
-          reg.showNotification('Đức & Quỳnh 💕', {
-            body: 'Thông báo đẩy đã được kích hoạt thành công! 🥰',
+          reg.showNotification('', {
+            body: 'Thông báo đẩy đã được kích hoạt thành công!',
             icon: '/icon-192.png',
             badge: '/icon-192.png',
             vibrate: [100, 50, 100],
           });
         } else {
-          new Notification('Đức & Quỳnh 💕', {
-            body: 'Thông báo đẩy đã được kích hoạt thành công! 🥰',
+          new Notification('', {
+            body: 'Thông báo đẩy đã được kích hoạt thành công!',
             icon: '/icon-192.png',
           });
         }

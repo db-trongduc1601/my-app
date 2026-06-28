@@ -41,7 +41,7 @@ const Login = () => {
 
       {/* Login card */}
       <div className="liquid-glass rim-light p-8 text-center max-w-sm w-full relative z-10 animate-shimmer">
-        <h1 className="font-display text-3xl font-bold text-primary text-glow mb-2">Đức & Quỳnh 💕</h1>
+        <h1 className="font-display text-3xl font-bold text-primary text-glow mb-2">Chào mừng trở lại 💕</h1>
         <p className="text-muted-foreground mb-8 text-sm">Không gian riêng của mình</p>
         
         <button 

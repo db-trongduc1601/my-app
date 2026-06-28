@@ -29,9 +29,9 @@ export default function Home() {
       snapshot.docs.forEach(doc => {
         const data = doc.data();
         if (data.owner_email?.toLowerCase() === myEmailLower) {
-          emails.add(data.friend_email.toLowerCase());
+          if (data.friend_email) emails.add(data.friend_email.toLowerCase());
         } else if (data.friend_email?.toLowerCase() === myEmailLower) {
-          emails.add(data.owner_email.toLowerCase());
+          if (data.owner_email) emails.add(data.owner_email.toLowerCase());
         }
       });
       setAcceptedEmails(Array.from(emails));
@@ -79,7 +79,7 @@ export default function Home() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="font-display text-2xl font-semibold text-foreground leading-tight text-glow">
-            Đức & Quỳnh 💕
+           Xin chào 💕
           </h1>
           <p className="text-xs text-muted-foreground mt-0.5">không gian riêng của mình</p>
         </div>

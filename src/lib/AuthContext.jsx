@@ -40,7 +40,7 @@ export const AuthProvider = ({ children }) => {
         if (EMAIL_WHITELIST.length > 0 && !EMAIL_WHITELIST.includes(currentUser.email)) {
           setAuthError({
             type: 'user_not_registered',
-            message: 'Email này không có quyền truy cập vào không gian riêng của Đức & Quỳnh!'
+            message: 'Email này không có quyền truy cập!'
           });
           setUser(null);
           setIsAuthenticated(false);
