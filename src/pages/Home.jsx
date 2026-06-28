@@ -25,11 +25,12 @@ export default function Home() {
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const emails = new Set();
+      const myEmailLower = myEmail.toLowerCase();
       snapshot.docs.forEach(doc => {
         const data = doc.data();
-        if (data.owner_email === myEmail) {
+        if (data.owner_email?.toLowerCase() === myEmailLower) {
           emails.add(data.friend_email.toLowerCase());
-        } else if (data.friend_email === myEmail) {
+        } else if (data.friend_email?.toLowerCase() === myEmailLower) {
           emails.add(data.owner_email.toLowerCase());
         }
       });
