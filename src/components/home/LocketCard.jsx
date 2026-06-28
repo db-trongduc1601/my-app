@@ -258,6 +258,7 @@ export default function LocketCard({ latestPhoto, allPhotos = [], onUploaded, on
         anh_url: downloadURL,
         loi_nhan: message,
         nguoi_tai_len: currentUser?.displayName?.split(' ')[0] || 'Me',
+        owner_email: currentUser?.email || '',
         media_type: mediaTab,
         created_date: new Date().toISOString(),
         createdAt: serverTimestamp() // Dùng để sắp xếp real-time

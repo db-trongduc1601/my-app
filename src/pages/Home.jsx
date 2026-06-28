@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { auth, db } from '../firebase'; // Nhập công cụ của chúng ta
-import { collection, query, orderBy, limit, onSnapshot } from 'firebase/firestore';
+import { collection, query, orderBy, limit, onSnapshot, where } from 'firebase/firestore';
 import LocketCard from '@/components/home/LocketCard';
 import DualClock from '@/components/home/DualClock';
 import { Heart } from 'lucide-react';
@@ -11,6 +11,33 @@ export default function Home() {
   
   // Nơi chứa danh sách ảnh
   const [photos, setPhotos] = useState([]);
+  const [acceptedEmails, setAcceptedEmails] = useState([]);
+
+  // Kéo đường ống Real-time từ Firestore để lấy danh sách bạn bè đã đồng ý
+  useEffect(() => {
+    if (!currentUser) return;
+    const myEmail = currentUser.email;
+
+    const q = query(
+      collection(db, 'friends'),
+      where('status', '==', 'accepted')
+    );
+
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const emails = new Set();
+      snapshot.docs.forEach(doc => {
+        const data = doc.data();
+        if (data.owner_email === myEmail) {
+          emails.add(data.friend_email.toLowerCase());
+        } else if (data.friend_email === myEmail) {
+          emails.add(data.owner_email.toLowerCase());
+        }
+      });
+      setAcceptedEmails(Array.from(emails));
+    });
+
+    return () => unsubscribe();
+  }, [currentUser]);
 
   // Kéo đường ống Real-time từ Firestore
   useEffect(() => {
@@ -37,6 +64,14 @@ export default function Home() {
   // Thay vì refetch, Firebase tự lo liệu rồi nên truyền hàm rỗng cho nó khỏi báo lỗi
   const handleDummyRefetch = () => {};
 
+  // Lọc ảnh: Chỉ giữ ảnh legacy, ảnh của mình, hoặc ảnh của bạn bè đã đồng ý
+  const filteredPhotos = photos.filter(p => {
+    if (!p.owner_email) return true; // Legacy/grandfathered
+    const owner = p.owner_email.toLowerCase();
+    const me = currentUser.email.toLowerCase();
+    return owner === me || acceptedEmails.includes(owner);
+  });
+
   return (
     <div className="px-4 pt-2 pb-4 space-y-5">
       {/* Header (Giữ nguyên 100%) */}
@@ -54,8 +89,8 @@ export default function Home() {
 
       {/* Locket — truyền dữ liệu thật từ Firebase vào */}
       <LocketCard
-        latestPhoto={photos[0] || null}
-        allPhotos={photos}
+        latestPhoto={filteredPhotos[0] || null}
+        allPhotos={filteredPhotos}
         onUploaded={handleDummyRefetch}
         onDeleted={handleDummyRefetch}
         currentUser={currentUser} 
