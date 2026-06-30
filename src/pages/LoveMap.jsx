@@ -64,6 +64,25 @@ function getDistance(lat1, lon1, lat2, lon2) {
   return R * c; // in metres
 }
 
+// Distance helper
+const calculatePathDistance = (coords) => {
+  if (!coords || coords.length < 2) return '0.00';
+  let totalMeters = 0;
+  for (let i = 1; i < coords.length; i++) {
+    totalMeters += getDistance(coords[i - 1].lat, coords[i - 1].lng, coords[i].lat, coords[i].lng);
+  }
+  return (totalMeters / 1000).toFixed(2);
+};
+
+// Duration formatter
+const formatDuration = (secs) => {
+  if (!secs || isNaN(secs)) return 'Không rõ';
+  if (secs < 60) return `${secs} giây`;
+  const mins = Math.floor(secs / 60);
+  const remainingSecs = secs % 60;
+  return `${mins} phút ${remainingSecs > 0 ? `${remainingSecs}s` : ''}`;
+};
+
 export default function LoveMap() {
   const currentUser = auth.currentUser;
   const mapRef = useRef(null);
@@ -86,8 +105,14 @@ export default function LoveMap() {
   const [journeyTitle, setJourneyTitle] = useState('');
   const [journeyNotes, setJourneyNotes] = useState('');
   const [journeyDate, setJourneyDate] = useState(() => new Date().toISOString().split('T')[0]);
+  const [journeyDuration, setJourneyDuration] = useState(0);
   const [savingJourney, setSavingJourney] = useState(false);
   const journeyWatchIdRef = useRef(null);
+  const journeyStartTimeRef = useRef(null);
+
+  // Journey Relive states
+  const [isReliving, setIsReliving] = useState(false);
+  const [reliveIndex, setReliveIndex] = useState(0);
 
   // Form Dialog states
   const [showAddDialog, setShowAddDialog] = useState(false);
@@ -237,7 +262,6 @@ export default function LoveMap() {
 
   // Mark current position and open memory form with timeout protection
   const handleMarkCurrentLocation = () => {
-    // If sharing and we have cached location, use immediately to avoid GPS timeouts
     if (isSharingLocation && myLocation) {
       setClickCoords(myLocation);
       setSelectedEmoji('💖');
@@ -283,6 +307,7 @@ export default function LoveMap() {
 
     setIsRecordingJourney(true);
     setJourneyCoords([]);
+    journeyStartTimeRef.current = Date.now(); // Capture start time
     toast.success("Bắt đầu ghi lại hành trình tình yêu! 👣");
 
     navigator.geolocation.getCurrentPosition(
@@ -325,7 +350,10 @@ export default function LoveMap() {
       return;
     }
 
-    // Ask to save AFTER completing the journey
+    // Calculate duration in seconds
+    const elapsedSecs = Math.round((Date.now() - journeyStartTimeRef.current) / 1000);
+    setJourneyDuration(elapsedSecs);
+
     setJourneyTitle('');
     setJourneyNotes('');
     setJourneyDate(new Date().toISOString().split('T')[0]);
@@ -344,6 +372,7 @@ export default function LoveMap() {
         notes: journeyNotes.trim(),
         date: journeyDate,
         coords: journeyCoords,
+        duration: journeyDuration,
         createdAt: serverTimestamp()
       });
       toast.success("Đã lưu trữ lộ trình kỷ niệm! 🗺️");
@@ -369,52 +398,29 @@ export default function LoveMap() {
     }
   };
 
-  const handleSaveMemory = async (e) => {
-    e.preventDefault();
-    if (!clickCoords || !noteText.trim()) return;
+  // ── Journey Relive Animation ticker ──────────────────────────────────────
+  useEffect(() => {
+    if (isReliving && selectedJourney && selectedJourney.coords && selectedJourney.coords.length > 0) {
+      const coords = selectedJourney.coords;
+      setReliveIndex(0);
+      focusOnLocation(coords[0].lat, coords[0].lng, 15);
 
-    setUploading(true);
-    let imageUrl = '';
+      let cur = 0;
+      const interval = setInterval(() => {
+        cur++;
+        if (cur >= coords.length) {
+          clearInterval(interval);
+          setIsReliving(false);
+          toast.success("Đã hoàn thành tua lại hành trình! 💕");
+        } else {
+          setReliveIndex(cur);
+          focusOnLocation(coords[cur].lat, coords[cur].lng, 15);
+        }
+      }, 700); // Step every 700ms
 
-    try {
-      if (photoFile) {
-        const fileRef = ref(storage, `love_memories/${Date.now()}_${photoFile.name}`);
-        const uploadResult = await uploadBytes(fileRef, photoFile);
-        imageUrl = await getDownloadURL(uploadResult.ref);
-      }
-
-      await addDoc(collection(db, 'love_memories'), {
-        createdBy: currentUser.email.toLowerCase(),
-        latitude: clickCoords.lat,
-        longitude: clickCoords.lng,
-        emoji: selectedEmoji,
-        notes: noteText.trim(),
-        date: memoryDate,
-        imageUrl,
-        createdAt: serverTimestamp()
-      });
-
-      toast.success("Đã ghim kỷ niệm của hai đứa! 💕");
-      setShowAddDialog(false);
-    } catch (err) {
-      console.error(err);
-      toast.error("Có lỗi xảy ra khi lưu kỷ niệm!");
-    } finally {
-      setUploading(false);
+      return () => clearInterval(interval);
     }
-  };
-
-  const handleDeleteMemory = async (id) => {
-    if (!window.confirm("Bạn có chắc chắn muốn xóa kỷ niệm này không?")) return;
-    try {
-      await deleteDoc(doc(db, 'love_memories', id));
-      setSelectedMemory(null);
-      toast.success("Đã xóa kỷ niệm.");
-    } catch (err) {
-      console.error(err);
-      toast.error("Không thể xóa kỷ niệm này!");
-    }
-  };
+  }, [isReliving, selectedJourney]);
 
   // Build custom icon for memory pins
   const createMemoryIcon = (createdBy, emoji) => {
@@ -492,6 +498,23 @@ export default function LoveMap() {
       html: `<div class="w-8 h-8 rounded-full bg-white/95 shadow border border-slate-100 flex items-center justify-center text-sm">${emoji}</div>`,
       iconSize: [32, 32],
       iconAnchor: [16, 16]
+    });
+  };
+
+  // Icon for relive avatar
+  const createReliveIcon = () => {
+    return L.divIcon({
+      className: 'love-map-relive-marker',
+      html: `
+        <div class="relive-pulse-wrapper">
+          <div class="relive-pulse-ring"></div>
+          <div class="relive-avatar-container animate-bounce">
+            <span class="relive-emoji">👩‍❤️‍👨</span>
+          </div>
+        </div>
+      `,
+      iconSize: [46, 46],
+      iconAnchor: [23, 23]
     });
   };
 
@@ -616,6 +639,14 @@ export default function LoveMap() {
                 icon={createStartEndIcon('🏁')}
               />
             </>
+          )}
+
+          {/* Journey Relive Avatar Marker Animation */}
+          {isReliving && selectedJourney && reliveIndex < selectedJourney.coords.length && (
+            <Marker 
+              position={[selectedJourney.coords[reliveIndex].lat, selectedJourney.coords[reliveIndex].lng]}
+              icon={createReliveIcon()}
+            />
           )}
 
           {/* Active Recording Love Journey Path */}
@@ -748,9 +779,12 @@ export default function LoveMap() {
             exit={{ opacity: 0, y: 100 }}
             className="absolute bottom-4 left-4 right-4 z-[999] max-w-sm mx-auto font-body"
           >
-            <div className="bg-white text-slate-800 p-4 rounded-xl shadow-2xl relative border border-slate-100 flex flex-col gap-2 text-left">
+            <div className="bg-white text-slate-800 p-4 rounded-xl shadow-2xl relative border border-slate-100 flex flex-col gap-2.5 text-left">
               <button 
-                onClick={() => setSelectedJourney(null)}
+                onClick={() => {
+                  setSelectedJourney(null);
+                  setIsReliving(false);
+                }}
                 className="absolute top-2 right-2 w-6 h-6 rounded-full bg-slate-100 flex items-center justify-center hover:bg-slate-200 transition-colors"
               >
                 <X size={12} className="text-slate-500" />
@@ -763,26 +797,56 @@ export default function LoveMap() {
                 </span>
               </div>
               
-              <h4 className="font-bold text-sm text-slate-800 mt-1">🗺️ {selectedJourney.title}</h4>
-              {selectedJourney.notes && <p className="text-xs text-slate-600 italic leading-relaxed mt-1">"{selectedJourney.notes}"</p>}
+              <h4 className="font-bold text-sm text-slate-800 mt-0.5">🗺️ {selectedJourney.title}</h4>
+              {selectedJourney.notes && <p className="text-xs text-slate-600 italic leading-relaxed">"{selectedJourney.notes}"</p>}
               
-              <div className="flex items-center justify-between mt-2 pt-2 border-t border-slate-100">
-                <span className="text-[9px] px-2 py-0.5 rounded-full bg-cyan-100 text-cyan-700 font-bold">
-                  Lộ trình: {selectedJourney.coords.length} điểm mốc
+              {/* Journey info pills */}
+              <div className="flex gap-2 mt-1">
+                <span className="text-[9px] bg-cyan-50 text-cyan-600 border border-cyan-100 px-2 py-0.5 rounded-full font-bold">
+                  Quãng đường: {calculatePathDistance(selectedJourney.coords)} km
                 </span>
-                <span className="text-[9px] text-slate-400">
-                  Ghi lại bởi: {profiles[selectedJourney.createdBy]?.display_name?.split(' ')[0] || selectedJourney.createdBy.split('@')[0]}
-                </span>
+                {selectedJourney.duration && (
+                  <span className="text-[9px] bg-slate-50 text-slate-600 border border-slate-100 px-2 py-0.5 rounded-full font-bold">
+                    Thời gian: {formatDuration(selectedJourney.duration)}
+                  </span>
+                )}
               </div>
-              
-              {selectedJourney.createdBy === currentUser?.email?.toLowerCase() && (
-                <button
-                  onClick={() => handleDeleteJourney(selectedJourney.id)}
-                  className="mt-2 text-[10px] text-red-500 font-semibold flex items-center gap-1.5 self-end hover:underline"
-                >
-                  <Trash2 size={10} /> Xóa hành trình
-                </button>
-              )}
+
+              {/* Relive Action Button */}
+              <button
+                disabled={isReliving}
+                onClick={() => setIsReliving(true)}
+                className={cn(
+                  "w-full py-2 rounded-xl text-white font-bold text-xs shadow flex items-center justify-center gap-1.5 transition-all mt-1 active:scale-95",
+                  isReliving 
+                    ? "bg-slate-300 cursor-not-allowed text-slate-500" 
+                    : "bg-cyan-500 hover:bg-cyan-600"
+                )}
+              >
+                {isReliving ? (
+                  <>
+                    <Loader2 size={12} className="animate-spin" /> Đang tua lại lộ trình di chuyển...
+                  </>
+                ) : (
+                  <>
+                    ▶️ Tua lại hành trình di chuyển
+                  </>
+                )}
+              </button>
+
+              <div className="flex items-center justify-between mt-1.5 pt-2 border-t border-slate-100">
+                <span className="text-[9px] text-slate-400">
+                  Ghi bởi: {profiles[selectedJourney.createdBy]?.display_name?.split(' ')[0] || selectedJourney.createdBy.split('@')[0]}
+                </span>
+                {selectedJourney.createdBy === currentUser?.email?.toLowerCase() && (
+                  <button
+                    onClick={() => handleDeleteJourney(selectedJourney.id)}
+                    className="text-[9px] text-red-500 font-semibold flex items-center gap-1 hover:underline"
+                  >
+                    <Trash2 size={10} /> Xóa hành trình
+                  </button>
+                )}
+              </div>
             </div>
           </motion.div>
         )}
@@ -879,7 +943,16 @@ export default function LoveMap() {
                     </div>
                     <div className="flex-1 min-w-0 text-left font-body">
                       <p className="text-xs font-bold text-foreground truncate">{jn.title}</p>
-                      {jn.notes && <p className="text-[11px] text-muted-foreground truncate mt-0.5">"{jn.notes}"</p>}
+                      <div className="flex gap-1.5 mt-1">
+                        <span className="text-[9px] bg-cyan-500/15 text-cyan-400 px-1.5 py-0.2 rounded-md font-semibold">
+                          {calculatePathDistance(jn.coords)} km
+                        </span>
+                        {jn.duration && (
+                          <span className="text-[9px] bg-white/5 text-muted-foreground px-1.5 py-0.2 rounded-md font-semibold flex items-center gap-0.5">
+                            ⏱️ {formatDuration(jn.duration)}
+                          </span>
+                        )}
+                      </div>
                       <div className="flex items-center justify-between mt-2">
                         <span className="text-[9px] text-muted-foreground">
                           {jn.date.split('-').reverse().join('/')}
