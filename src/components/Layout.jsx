@@ -7,7 +7,7 @@ import BottomNav from '@/components/BottomNav';
 import GlobalChat from '@/components/GlobalChat';
 import FriendsSidebar from '@/components/friends/FriendsSidebar';
 import ProfileEditorModal from '@/components/profile/ProfileEditorModal';
-import { AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import { auth, db } from '../firebase';
 import { collection, query, where, onSnapshot, doc, updateDoc } from 'firebase/firestore';
 import { signOut, onAuthStateChanged } from 'firebase/auth';
