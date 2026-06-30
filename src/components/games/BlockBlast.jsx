@@ -1,0 +1,533 @@
+import React, { useState, useEffect, useRef } from 'react';
+import { db, auth } from '../../firebase';
+import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
+import { toast } from 'sonner';
+import { RefreshCw, Trophy, Zap, AlertCircle } from 'lucide-react';
+import confetti from 'canvas-confetti';
+import { cn } from '@/lib/utils';
+
+// Color themes matching liquid glass aesthetics
+const BLOCK_COLORS = [
+  '#FF6B9D', // Rose pink
+  '#FF8FAB', // Soft pink
+  '#06b6d4', // Cyan
+  '#10b981', // Emerald
+  '#a855f7', // Purple
+  '#f97316', // Orange
+  '#3b82f6'  // Blue
+];
+
+// Definition of block shapes (row, col offsets relative to origin)
+const SHAPES = [
+  { name: '1x1', coords: [[0, 0]] },
+  { name: '1x2', coords: [[0, 0], [0, 1]] },
+  { name: '2x1', coords: [[0, 0], [1, 0]] },
+  { name: '1x3', coords: [[0, 0], [0, 1], [0, 2]] },
+  { name: '3x1', coords: [[0, 0], [1, 0], [2, 0]] },
+  { name: '1x4', coords: [[0, 0], [0, 1], [0, 2], [0, 3]] },
+  { name: '4x1', coords: [[0, 0], [1, 0], [2, 0], [3, 0]] },
+  { name: '2x2', coords: [[0, 0], [0, 1], [1, 0], [1, 1]] },
+  { name: 'L3', coords: [[0, 0], [1, 0], [1, 1]] },
+  { name: 'L4', coords: [[0, 0], [1, 0], [2, 0], [2, 1]] },
+  { name: 'T4', coords: [[0, 1], [1, 0], [1, 1], [1, 2]] },
+  { name: 'Z4', coords: [[0, 0], [0, 1], [1, 1], [1, 2]] }
+];
+
+export default function BlockBlast({ currentHighScores }) {
+  const currentUser = auth.currentUser;
+  const myEmailLower = currentUser?.email?.toLowerCase() || '';
+  
+  // Game states
+  const [board, setBoard] = useState(() => Array(8).fill(null).map(() => Array(8).fill(0)));
+  const [score, setScore] = useState(0);
+  const [highScore, setHighScore] = useState(0);
+  const [upcomingBlocks, setUpcomingBlocks] = useState([]);
+  const [gameOver, setGameOver] = useState(false);
+  const [combo, setCombo] = useState(0);
+
+  // Drag states
+  const [draggingIndex, setDraggingIndex] = useState(null); // index (0,1,2) of upcoming block
+  const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 }); // offset from touch start to block top-left
+  const [dragPosition, setDragPosition] = useState({ x: 0, y: 0 }); // current screen position
+  const [hoveredCell, setHoveredCell] = useState(null); // { row, col } top-left landing cell
+
+  const boardRef = useRef(null);
+  const touchStartRef = useRef({ x: 0, y: 0 });
+  const blockRefs = useRef([]);
+
+  // Load high score
+  useEffect(() => {
+    if (currentHighScores && myEmailLower) {
+      setHighScore(currentHighScores[myEmailLower] || 0);
+    }
+  }, [currentHighScores, myEmailLower]);
+
+  // Start/Restart Game
+  useEffect(() => {
+    startNewGame();
+  }, []);
+
+  const startNewGame = () => {
+    setBoard(Array(8).fill(null).map(() => Array(8).fill(0)));
+    setScore(0);
+    setGameOver(false);
+    setCombo(0);
+    setUpcomingBlocks(generateNewBlocks());
+  };
+
+  // Generate 3 random blocks
+  const generateNewBlocks = () => {
+    return Array(3).fill(null).map(() => {
+      const shape = SHAPES[Math.floor(Math.random() * SHAPES.length)];
+      const color = BLOCK_COLORS[Math.floor(Math.random() * BLOCK_COLORS.length)];
+      return { ...shape, color, id: Math.random() };
+    });
+  };
+
+  // Check if a block can be placed at a specific cell
+  const canPlaceBlock = (boardState, blockCoords, startRow, startCol) => {
+    for (const [rOffset, cOffset] of blockCoords) {
+      const targetRow = startRow + rOffset;
+      const targetCol = startCol + cOffset;
+      
+      // Check boundaries
+      if (targetRow < 0 || targetRow >= 8 || targetCol < 0 || targetCol >= 8) {
+        return false;
+      }
+      // Check occupancy
+      if (boardState[targetRow][targetCol] !== 0) {
+        return false;
+      }
+    }
+    return true;
+  };
+
+  // Check if there is ANY valid move left for a specific block on the current board
+  const hasAnyValidMove = (boardState, blockCoords) => {
+    for (let r = 0; r < 8; r++) {
+      for (let c = 0; c < 8; c++) {
+        if (canPlaceBlock(boardState, blockCoords, r, c)) {
+          return true;
+        }
+      }
+    }
+    return false;
+  };
+
+  // Check Game Over status
+  const checkGameOver = (currentBoard, currentBlocks) => {
+    // If no blocks remain, it's not game over yet
+    const activeBlocks = currentBlocks.filter(b => b !== null);
+    if (activeBlocks.length === 0) return false;
+
+    // Check if at least one active block has a valid move
+    for (const block of activeBlocks) {
+      if (hasAnyValidMove(currentBoard, block.coords)) {
+        return false;
+      }
+    }
+    return true;
+  };
+
+  // Update High Score on Firestore
+  const updateHighScore = async (newScore) => {
+    if (!myEmailLower) return;
+    try {
+      const newScores = { ...currentHighScores, [myEmailLower]: newScore };
+      await setDoc(doc(db, 'game_high_scores', 'block_blast'), {
+        scores: newScores,
+        updatedAt: serverTimestamp()
+      }, { merge: true });
+      setHighScore(newScore);
+      toast.success("🏆 Kỷ lục mới đã được đồng bộ!");
+      confetti({
+        particleCount: 150,
+        spread: 80,
+        origin: { y: 0.6 }
+      });
+    } catch (e) {
+      console.error("Failed to update high score:", e);
+    }
+  };
+
+  // Drag and Drop mouse & touch listeners
+  const handleDragStart = (e, index) => {
+    if (gameOver) return;
+    const isTouch = e.type.startsWith('touch');
+    const clientX = isTouch ? e.touches[0].clientX : e.clientX;
+    const clientY = isTouch ? e.touches[0].clientY : e.clientY;
+
+    const blockEl = blockRefs.current[index];
+    if (!blockEl) return;
+
+    const rect = blockEl.getBoundingClientRect();
+    
+    // Save starting offsets relative to the top-left of the block
+    setDragOffset({
+      x: clientX - rect.left,
+      y: clientY - rect.top
+    });
+    setDragPosition({ x: clientX, y: clientY });
+    setDraggingIndex(index);
+    touchStartRef.current = { x: clientX, y: clientY };
+
+    if (e.cancelable) e.preventDefault();
+  };
+
+  const handleDragMove = (e) => {
+    if (draggingIndex === null) return;
+    const isTouch = e.type.startsWith('touch');
+    const clientX = isTouch ? e.touches[0].clientX : e.clientX;
+    const clientY = isTouch ? e.touches[0].clientY : e.clientY;
+
+    setDragPosition({ x: clientX, y: clientY });
+
+    // Calculate hover cell relative to the grid bounding rect
+    const boardEl = boardRef.current;
+    if (!boardEl) return;
+
+    const boardRect = boardEl.getBoundingClientRect();
+    const cellWidth = boardRect.width / 8;
+    const cellHeight = boardRect.height / 8;
+
+    // Calculate the coordinates of the block origin
+    // Let's project the center of the block first cell on the grid
+    const blockX = clientX - dragOffset.x;
+    const blockY = clientY - dragOffset.y;
+
+    // Find closest cell coordinate on board
+    const relativeX = blockX - boardRect.left + (cellWidth / 2);
+    const relativeY = blockY - boardRect.top + (cellHeight / 2);
+
+    const col = Math.floor(relativeX / cellWidth);
+    const row = Math.floor(relativeY / cellHeight);
+
+    const block = upcomingBlocks[draggingIndex];
+    if (block && row >= 0 && row < 8 && col >= 0 && col < 8) {
+      if (canPlaceBlock(board, block.coords, row, col)) {
+        setHoveredCell({ row, col });
+      } else {
+        setHoveredCell(null);
+      }
+    } else {
+      setHoveredCell(null);
+    }
+  };
+
+  const handleDragEnd = () => {
+    if (draggingIndex === null) return;
+
+    const block = upcomingBlocks[draggingIndex];
+    
+    if (hoveredCell && block) {
+      const { row, col } = hoveredCell;
+      
+      // Update Board
+      const newBoard = board.map(r => [...r]);
+      block.coords.forEach(([rOffset, cOffset]) => {
+        newBoard[row + rOffset][col + cOffset] = block.color;
+      });
+
+      // Clear full rows & columns
+      let rowsToClear = [];
+      let colsToClear = [];
+
+      for (let r = 0; r < 8; r++) {
+        if (newBoard[r].every(cell => cell !== 0)) {
+          rowsToClear.push(r);
+        }
+      }
+
+      for (let c = 0; c < 8; c++) {
+        let isColFull = true;
+        for (let r = 0; r < 8; r++) {
+          if (newBoard[r][c] === 0) {
+            isColFull = false;
+            break;
+          }
+        }
+        if (isColFull) {
+          colsToClear.push(c);
+        }
+      }
+
+      // Perform clear
+      let cellsCleared = 0;
+      rowsToClear.forEach(r => {
+        for (let c = 0; c < 8; c++) {
+          if (newBoard[r][c] !== 0) {
+            newBoard[r][c] = 0;
+            cellsCleared++;
+          }
+        }
+      });
+
+      colsToClear.forEach(c => {
+        for (let r = 0; r < 8; r++) {
+          if (newBoard[r][c] !== 0) {
+            newBoard[r][c] = 0;
+            cellsCleared++;
+          }
+        }
+      });
+
+      // Calculate score
+      const blockScore = block.coords.length;
+      let clearScore = 0;
+      let newCombo = combo;
+
+      if (cellsCleared > 0) {
+        newCombo++;
+        clearScore = cellsCleared * 10 * newCombo;
+        setCombo(newCombo);
+        
+        // Success clearing sound/vibe (Toast micro-effect)
+        if (newCombo > 1) {
+          toast.success(`💥 Combo x${newCombo}! +${clearScore}đ`);
+        }
+      } else {
+        setCombo(0);
+      }
+
+      const additionalScore = blockScore + clearScore;
+      const newScore = score + additionalScore;
+      setScore(newScore);
+
+      // Check for highscore record breaks
+      if (newScore > highScore) {
+        setHighScore(newScore);
+      }
+
+      // Update upcoming blocks
+      const nextBlocks = [...upcomingBlocks];
+      nextBlocks[draggingIndex] = null;
+
+      // If all 3 blocks used, generate new ones
+      const hasActive = nextBlocks.some(b => b !== null);
+      let finalBlocks = nextBlocks;
+      if (!hasActive) {
+        finalBlocks = generateNewBlocks();
+      }
+
+      setBoard(newBoard);
+      setUpcomingBlocks(finalBlocks);
+
+      // Check if Game Over
+      if (checkGameOver(newBoard, finalBlocks)) {
+        setGameOver(true);
+        if (newScore > (currentHighScores[myEmailLower] || 0)) {
+          updateHighScore(newScore);
+        }
+      }
+    }
+
+    setDraggingIndex(null);
+    setHoveredCell(null);
+  };
+
+  useEffect(() => {
+    if (draggingIndex !== null) {
+      window.addEventListener('mousemove', handleDragMove);
+      window.addEventListener('mouseup', handleDragEnd);
+      window.addEventListener('touchmove', handleDragMove, { passive: false });
+      window.addEventListener('touchend', handleDragEnd);
+    }
+
+    return () => {
+      window.removeEventListener('mousemove', handleDragMove);
+      window.removeEventListener('mouseup', handleDragEnd);
+      window.removeEventListener('touchmove', handleDragMove);
+      window.removeEventListener('touchend', handleDragEnd);
+    };
+  }, [draggingIndex, hoveredCell]);
+
+  return (
+    <div className="flex flex-col items-center w-full max-w-md mx-auto space-y-4 select-none relative font-display">
+      {/* Game Header: score details */}
+      <div className="w-full flex justify-between items-center liquid-glass px-4 py-2.5 rounded-2xl border-none">
+        <div className="flex flex-col items-start">
+          <span className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider">Điểm số</span>
+          <span className="text-xl font-black text-primary">{score}</span>
+        </div>
+        
+        {combo > 0 && (
+          <span className="text-[10px] bg-red-500/20 text-red-400 border border-red-500/30 px-2 py-0.5 rounded-full font-bold animate-pulse flex items-center gap-1">
+            <Zap size={8} /> Combo x{combo}
+          </span>
+        )}
+
+        <div className="flex flex-col items-end">
+          <span className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider flex items-center gap-1">
+            <Trophy size={10} className="text-yellow-400" /> Kỷ lục của bạn
+          </span>
+          <span className="text-sm font-bold text-yellow-400">{highScore}</span>
+        </div>
+      </div>
+
+      {/* 8x8 Grid Board */}
+      <div 
+        ref={boardRef}
+        className="w-full aspect-square bg-[#1a141b]/90 border border-white/10 rounded-2xl p-1.5 grid grid-cols-8 grid-rows-8 gap-1.5 touch-action-none"
+        style={{ touchAction: 'none' }}
+      >
+        {board.map((row, rIdx) => 
+          row.map((cell, cIdx) => {
+            // Check if current cell is highlighted as hovered landing
+            let isHovered = false;
+            if (hoveredCell && draggingIndex !== null) {
+              const block = upcomingBlocks[draggingIndex];
+              if (block) {
+                isHovered = block.coords.some(
+                  ([ro, co]) => hoveredCell.row + ro === rIdx && hoveredCell.col + co === cIdx
+                );
+              }
+            }
+
+            return (
+              <div
+                key={`${rIdx}-${cIdx}`}
+                className="rounded-[4px] relative transition-colors duration-150"
+                style={{
+                  backgroundColor: cell !== 0 
+                    ? cell 
+                    : isHovered 
+                      ? `${upcomingBlocks[draggingIndex]?.color}44` 
+                      : 'rgba(255,255,255,0.03)',
+                  border: isHovered 
+                    ? `1px dashed ${upcomingBlocks[draggingIndex]?.color}` 
+                    : '1px solid rgba(255,255,255,0.02)'
+                }}
+              >
+                {cell !== 0 && (
+                  <div className="absolute inset-px rounded-[2px] bg-white/10 border-t border-l border-white/20 pointer-events-none" />
+                )}
+              </div>
+            );
+          })
+        )}
+      </div>
+
+      {/* Upcoming Blocks Selector */}
+      <div className="w-full grid grid-cols-3 gap-2 py-4">
+        {upcomingBlocks.map((block, index) => {
+          if (!block) return <div key={index} className="aspect-square bg-transparent" />;
+
+          // Calculate dimensions to render
+          const rows = Math.max(...block.coords.map(c => c[0])) + 1;
+          const cols = Math.max(...block.coords.map(c => c[1])) + 1;
+
+          // Check if this block can be placed on the current board
+          const activeClass = hasAnyValidMove(board, block.coords) ? "" : "opacity-30 pointer-events-none grayscale";
+
+          return (
+            <div
+              key={block.id}
+              ref={el => blockRefs.current[index] = el}
+              onMouseDown={(e) => handleDragStart(e, index)}
+              onTouchStart={(e) => handleDragStart(e, index)}
+              className={cn(
+                "aspect-square liquid-glass-sm rounded-2xl p-4 flex items-center justify-center cursor-grab active:cursor-grabbing select-none relative touch-action-none",
+                activeClass,
+                draggingIndex === index && "opacity-0" // Hide original when dragging
+              )}
+              style={{ touchAction: 'none' }}
+            >
+              {/* Draw block preview matrix */}
+              <div 
+                className="grid gap-1"
+                style={{
+                  gridTemplateRows: `repeat(${rows}, minmax(0, 1fr))`,
+                  gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`,
+                  width: `${cols * 14}px`,
+                  height: `${rows * 14}px`
+                }}
+              >
+                {Array(rows).fill(null).map((_, r) => 
+                  Array(cols).fill(null).map((_, c) => {
+                    const hasCell = block.coords.some(([ro, co]) => ro === r && co === c);
+                    return (
+                      <div
+                        key={`${r}-${c}`}
+                        className="rounded-sm"
+                        style={{
+                          backgroundColor: hasCell ? block.color : 'transparent',
+                          boxShadow: hasCell ? 'inset 0 1px 2px rgba(255,255,255,0.2)' : 'none'
+                        }}
+                      />
+                    );
+                  })
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Dragging Overlay */}
+      {draggingIndex !== null && upcomingBlocks[draggingIndex] && (() => {
+        const block = upcomingBlocks[draggingIndex];
+        const rows = Math.max(...block.coords.map(c => c[0])) + 1;
+        const cols = Math.max(...block.coords.map(c => c[1])) + 1;
+
+        return (
+          <div
+            className="fixed pointer-events-none z-[99999] will-change-transform"
+            style={{
+              left: `${dragPosition.x - dragOffset.x}px`,
+              top: `${dragPosition.y - dragOffset.y}px`,
+              width: `${cols * 32}px`,
+              height: `${rows * 32}px`
+            }}
+          >
+            <div 
+              className="grid gap-1.5"
+              style={{
+                gridTemplateRows: `repeat(${rows}, minmax(0, 1fr))`,
+                gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`,
+                width: '100%',
+                height: '100%'
+              }}
+            >
+              {Array(rows).fill(null).map((_, r) => 
+                Array(cols).fill(null).map((_, c) => {
+                  const hasCell = block.coords.some(([ro, co]) => ro === r && co === c);
+                  return (
+                    <div
+                      key={`${r}-${c}`}
+                      className="rounded-md border border-white/10 shadow-lg"
+                      style={{
+                        backgroundColor: hasCell ? block.color : 'transparent',
+                        boxShadow: hasCell ? 'inset 0 2px 4px rgba(255,255,255,0.3)' : 'none'
+                      }}
+                    />
+                  );
+                })
+              )}
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* Game Over Dialog Card Overlay */}
+      {gameOver && (
+        <div className="absolute inset-0 bg-[#181116]/80 backdrop-blur-md rounded-3xl z-[1000] flex flex-col items-center justify-center p-6 space-y-4 border border-white/10 animate-fade-in">
+          <AlertCircle size={44} className="text-red-500 animate-bounce" />
+          <h2 className="text-xl font-bold text-glow">Hết nước đi rồi! 🥺</h2>
+          <div className="text-center font-body space-y-1">
+            <p className="text-xs text-muted-foreground">Điểm số đạt được:</p>
+            <p className="text-2xl font-black text-primary">{score}đ</p>
+            {score >= highScore && score > 0 && (
+              <p className="text-[10px] text-yellow-400 font-bold uppercase tracking-wider mt-1">🎉 Kỷ lục mới của riêng bạn!</p>
+            )}
+          </div>
+          <button
+            onClick={startNewGame}
+            className="flex items-center gap-1.5 px-6 py-2.5 rounded-2xl gradient-primary text-white text-xs font-bold shadow-lg transition hover:scale-105 active:scale-95 cursor-pointer"
+          >
+            <RefreshCw size={12} /> Chơi lại
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}

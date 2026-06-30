@@ -18,13 +18,13 @@
 
 import { useEffect, useRef, useCallback } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { Home, Utensils, Heart, Map, Music } from 'lucide-react';
+import { Home, Utensils, Gamepad2, Map, Music } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 const tabs = [
   { path: '/', icon: Home, label: 'Trang chủ' },
   { path: '/food', icon: Utensils, label: 'Ăn gì?' },
-  { path: '/vault', icon: Heart, label: 'Đồ dùng' },
+  { path: '/games', icon: Gamepad2, label: 'Trò chơi' },
   { path: '/lovemap', icon: Map, label: 'Bản đồ' },
   { path: '/entertainment', icon: Music, label: 'Giải trí' },
 ];

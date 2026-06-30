@@ -15,7 +15,7 @@ import { onAuthStateChanged, signOut } from 'firebase/auth';
 import { useNotifications } from '@/hooks/useNotifications';
 
 const Food = lazy(() => import('@/pages/Food'));
-const Vault = lazy(() => import('@/pages/Vault'));
+const Games = lazy(() => import('@/pages/Games'));
 const LoveMap = lazy(() => import('@/pages/LoveMap'));
 const Entertainment = lazy(() => import('@/pages/Entertainment'));
 
@@ -46,7 +46,7 @@ const AuthenticatedApp = () => {
         <Route element={<Layout />}>
           <Route path="/" element={<Home />} />
           <Route path="/food" element={<Food />} />
-          <Route path="/vault" element={<Vault />} />
+          <Route path="/games" element={<Games />} />
           <Route path="/lovemap" element={<LoveMap />} />
           <Route path="/entertainment" element={<Entertainment />} />
         </Route>
