@@ -27,7 +27,8 @@ import {
   Maximize2, 
   Loader2, 
   Compass,
-  BookOpen
+  BookOpen,
+  Route
 } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
@@ -47,6 +48,22 @@ const EMOJIS = [
   { char: '💖', label: 'Hẹn hò' }
 ];
 
+// Haversine distance calculator to filter out GPS jitter
+function getDistance(lat1, lon1, lat2, lon2) {
+  const R = 6371e3; // metres
+  const phi1 = lat1 * Math.PI / 180;
+  const phi2 = lat2 * Math.PI / 180;
+  const deltaPhi = (lat2 - lat1) * Math.PI / 180;
+  const deltaLambda = (lon2 - lon1) * Math.PI / 180;
+
+  const a = Math.sin(deltaPhi / 2) * Math.sin(deltaPhi / 2) +
+            Math.cos(phi1) * Math.cos(phi2) *
+            Math.sin(deltaLambda / 2) * Math.sin(deltaLambda / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+
+  return R * c; // in metres
+}
+
 export default function LoveMap() {
   const currentUser = auth.currentUser;
   const mapRef = useRef(null);
@@ -60,6 +77,18 @@ export default function LoveMap() {
   const [myLocation, setMyLocation] = useState(null);
   const watchIdRef = useRef(null);
 
+  // Love Journey states
+  const [isRecordingJourney, setIsRecordingJourney] = useState(false);
+  const [journeyCoords, setJourneyCoords] = useState([]);
+  const [savedJourneys, setSavedJourneys] = useState([]);
+  const [selectedJourney, setSelectedJourney] = useState(null);
+  const [showJourneyDialog, setShowJourneyDialog] = useState(false);
+  const [journeyTitle, setJourneyTitle] = useState('');
+  const [journeyNotes, setJourneyNotes] = useState('');
+  const [journeyDate, setJourneyDate] = useState(() => new Date().toISOString().split('T')[0]);
+  const [savingJourney, setSavingJourney] = useState(false);
+  const journeyWatchIdRef = useRef(null);
+
   // Form Dialog states
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [clickCoords, setClickCoords] = useState(null);
@@ -69,8 +98,9 @@ export default function LoveMap() {
   const [photoFile, setPhotoFile] = useState(null);
   const [uploading, setUploading] = useState(false);
 
-  // Directory overlay state
+  // Directory list states
   const [showListDialog, setShowListDialog] = useState(false);
+  const [activeListTab, setActiveListTab] = useState('memories'); // 'memories' or 'journeys'
 
   // Polaroid fullscreen states
   const [zoomImage, setZoomImage] = useState(null);
@@ -98,6 +128,16 @@ export default function LoveMap() {
     return () => unsub();
   }, []);
 
+  // Fetch saved love journeys
+  useEffect(() => {
+    const q = query(collection(db, 'love_journeys'), orderBy('createdAt', 'desc'));
+    const unsub = onSnapshot(q, (snap) => {
+      const jns = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      setSavedJourneys(jns);
+    });
+    return () => unsub();
+  }, []);
+
   // Location sharing real-time synchronization
   useEffect(() => {
     if (!currentUser) return;
@@ -109,7 +149,6 @@ export default function LoveMap() {
     const unsubLoc = onSnapshot(doc(db, 'user_locations', partnerEmail), (docSnap) => {
       if (docSnap.exists()) {
         const data = docSnap.data();
-        // Check if partner shared location and it hasn't expired (2 minutes fallback)
         if (data.status === 'active' && data.updatedAt && (Date.now() - data.updatedAt.toMillis() < 120000)) {
           setPartnerLocation({
             lat: data.latitude,
@@ -127,6 +166,7 @@ export default function LoveMap() {
     return () => {
       if (unsubLoc) unsubLoc();
       if (watchIdRef.current) navigator.geolocation.clearWatch(watchIdRef.current);
+      if (journeyWatchIdRef.current) navigator.geolocation.clearWatch(journeyWatchIdRef.current);
     };
   }, [profiles, currentUser]);
 
@@ -153,7 +193,6 @@ export default function LoveMap() {
   // Turn ON / OFF realtime location tracking
   const toggleLocationSharing = () => {
     if (isSharingLocation) {
-      // Turn off sharing
       if (watchIdRef.current) {
         navigator.geolocation.clearWatch(watchIdRef.current);
         watchIdRef.current = null;
@@ -168,7 +207,6 @@ export default function LoveMap() {
       }
       toast.info("Đã tắt định vị thực tế.");
     } else {
-      // Turn on sharing
       if (!('geolocation' in navigator)) {
         toast.error("Trình duyệt không hỗ trợ định vị!");
         return;
@@ -177,7 +215,6 @@ export default function LoveMap() {
       setIsSharingLocation(true);
       toast.success("Đang kích hoạt định vị thực tế...");
 
-      // Get initial and start watching
       navigator.geolocation.getCurrentPosition(
         (position) => {
           handleLocUpdate(position);
@@ -198,14 +235,26 @@ export default function LoveMap() {
     }
   };
 
-  // Mark current position and open memory form
+  // Mark current position and open memory form with timeout protection
   const handleMarkCurrentLocation = () => {
+    // If sharing and we have cached location, use immediately to avoid GPS timeouts
+    if (isSharingLocation && myLocation) {
+      setClickCoords(myLocation);
+      setSelectedEmoji('💖');
+      setNoteText('');
+      setPhotoFile(null);
+      setMemoryDate(new Date().toISOString().split('T')[0]);
+      setShowAddDialog(true);
+      focusOnLocation(myLocation.lat, myLocation.lng, 15);
+      return;
+    }
+
     if (!('geolocation' in navigator)) {
       toast.error("Trình duyệt không hỗ trợ định vị!");
       return;
     }
     
-    toast.success("Đang xác định vị trí hiện tại của bạn...");
+    toast.success("Đang xác định vị trí hiện tại...");
     navigator.geolocation.getCurrentPosition(
       (position) => {
         const { latitude, longitude } = position.coords;
@@ -219,10 +268,105 @@ export default function LoveMap() {
       },
       (err) => {
         console.error(err);
-        toast.error("Không thể lấy vị trí hiện tại. Vui lòng bật định vị thiết bị!");
+        toast.error("Lấy vị trí thất bại. Hãy chắc chắn đã bật GPS trên thiết bị!");
       },
+      { enableHighAccuracy: true, timeout: 8000, maximumAge: 0 }
+    );
+  };
+
+  // ── Love Journey Handlers ────────────────────────────────────────────────
+  const startRecordingJourney = () => {
+    if (!('geolocation' in navigator)) {
+      toast.error("Trình duyệt không hỗ trợ định vị!");
+      return;
+    }
+
+    setIsRecordingJourney(true);
+    setJourneyCoords([]);
+    toast.success("Bắt đầu ghi lại hành trình tình yêu! 👣");
+
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        const pt = { lat: position.coords.latitude, lng: position.coords.longitude };
+        setJourneyCoords([pt]);
+        focusOnLocation(pt.lat, pt.lng, 15);
+      },
+      (err) => console.error(err),
       { enableHighAccuracy: true }
     );
+
+    journeyWatchIdRef.current = navigator.geolocation.watchPosition(
+      (position) => {
+        const { latitude, longitude } = position.coords;
+        setJourneyCoords(prev => {
+          if (prev.length > 0) {
+            const last = prev[prev.length - 1];
+            const dist = getDistance(last.lat, last.lng, latitude, longitude);
+            if (dist < 10) return prev; // Lọc nếu di chuyển dưới 10m
+          }
+          return [...prev, { lat: latitude, lng: longitude }];
+        });
+      },
+      (err) => console.error(err),
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+    );
+  };
+
+  const stopRecordingJourney = () => {
+    if (journeyWatchIdRef.current) {
+      navigator.geolocation.clearWatch(journeyWatchIdRef.current);
+      journeyWatchIdRef.current = null;
+    }
+    setIsRecordingJourney(false);
+
+    if (journeyCoords.length < 2) {
+      toast.info("Hành trình di chuyển quá ngắn để lưu lại!");
+      setJourneyCoords([]);
+      return;
+    }
+
+    // Ask to save AFTER completing the journey
+    setJourneyTitle('');
+    setJourneyNotes('');
+    setJourneyDate(new Date().toISOString().split('T')[0]);
+    setShowJourneyDialog(true);
+  };
+
+  const handleSaveJourney = async (e) => {
+    e.preventDefault();
+    if (!journeyTitle.trim() || journeyCoords.length < 2) return;
+
+    setSavingJourney(true);
+    try {
+      await addDoc(collection(db, 'love_journeys'), {
+        createdBy: currentUser.email.toLowerCase(),
+        title: journeyTitle.trim(),
+        notes: journeyNotes.trim(),
+        date: journeyDate,
+        coords: journeyCoords,
+        createdAt: serverTimestamp()
+      });
+      toast.success("Đã lưu trữ lộ trình kỷ niệm! 🗺️");
+      setShowJourneyDialog(false);
+      setJourneyCoords([]);
+    } catch (err) {
+      console.error(err);
+      toast.error("Không thể lưu lộ trình hành trình!");
+    } finally {
+      setSavingJourney(false);
+    }
+  };
+
+  const handleDeleteJourney = async (id) => {
+    if (!window.confirm("Bạn có chắc chắn muốn xóa hành trình này không?")) return;
+    try {
+      await deleteDoc(doc(db, 'love_journeys', id));
+      setSelectedJourney(null);
+      toast.success("Đã xóa hành trình.");
+    } catch (err) {
+      console.error(err);
+      toast.error("Không thể xóa hành trình!");
+    }
   };
 
   const handleSaveMemory = async (e) => {
@@ -341,21 +485,31 @@ export default function LoveMap() {
     });
   };
 
+  // Icon for start and end route markers
+  const createStartEndIcon = (emoji) => {
+    return L.divIcon({
+      className: 'love-map-emoji-marker',
+      html: `<div class="w-8 h-8 rounded-full bg-white/95 shadow border border-slate-100 flex items-center justify-center text-sm">${emoji}</div>`,
+      iconSize: [32, 32],
+      iconAnchor: [16, 16]
+    });
+  };
+
   // Prepare journey path line coordinates
   const pathPositions = memories.map(m => [m.latitude, m.longitude]);
 
   return (
     <div className="flex flex-col h-[calc(100vh-140px)] w-full relative love-map-container no-scrollbar overflow-hidden">
       {/* Map Header Controls */}
-      <div className="absolute top-4 left-4 right-4 z-[999] flex items-center justify-between pointer-events-none">
+      <div className="absolute top-4 left-4 right-4 z-[999] flex items-center justify-between pointer-events-none font-display">
         <div className="liquid-glass rim-light px-4 py-2 flex items-center gap-2 pointer-events-auto shadow-lg">
           <MapPin className="text-primary w-4 h-4" />
-          <span className="font-semibold text-xs text-foreground text-glow font-display">Love Map</span>
+          <span className="font-semibold text-xs text-foreground text-glow">Love Map</span>
         </div>
 
         {/* Action controls */}
         <div className="flex items-center gap-2 pointer-events-auto">
-          {/* List memories button */}
+          {/* List memories & journeys button */}
           <button
             onClick={() => setShowListDialog(true)}
             className="liquid-glass rim-light p-2.5 rounded-full text-muted-foreground hover:text-foreground transition-all duration-300 shadow-lg active:scale-95 bg-[#181116]/80 backdrop-blur-md"
@@ -371,6 +525,20 @@ export default function LoveMap() {
             title="Ghim vị trí hiện tại"
           >
             <Plus className="w-4 h-4" />
+          </button>
+
+          {/* Realtime Love Journey tracking button (blue / red animated) */}
+          <button
+            onClick={isRecordingJourney ? stopRecordingJourney : startRecordingJourney}
+            className={cn(
+              "liquid-glass rim-light p-2.5 rounded-full transition-all duration-300 shadow-lg active:scale-95",
+              isRecordingJourney 
+                ? "bg-red-500 hover:bg-red-600 text-white border-transparent animate-pulse" 
+                : "bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-400 border-cyan-500/30"
+            )}
+            title={isRecordingJourney ? "Kết thúc hành trình" : "Ghi lại hành trình"}
+          >
+            <Route className="w-4 h-4" />
           </button>
 
           {/* Location sharing toggle */}
@@ -390,9 +558,13 @@ export default function LoveMap() {
       </div>
 
       {/* Instructions Overlay */}
-      <div className="absolute bottom-4 left-4 z-[999] pointer-events-none max-w-[200px]">
+      <div className="absolute bottom-4 left-4 z-[999] pointer-events-none max-w-[220px]">
         <div className="liquid-glass rim-light p-2 text-[10px] text-muted-foreground leading-normal pointer-events-auto">
-          💡 **Mẹo**: Nhấn nút `+` ở góc trên để đánh dấu vị trí hiện tại của bạn vào bản đồ kỷ niệm.
+          {isRecordingJourney ? (
+            <span className="text-red-400 font-bold animate-pulse">👣 Đang ghi nhận hành trình di chuyển...</span>
+          ) : (
+            <span>💡 **Mẹo**: Nhấn nút màu xanh dương để bắt đầu vẽ hành trình đi chơi cùng nhau.</span>
+          )}
         </div>
       </div>
 
@@ -400,7 +572,7 @@ export default function LoveMap() {
       <div className="flex-1 w-full h-full relative z-0 rounded-3xl overflow-hidden shadow-inner border border-white/20">
         <MapContainer 
           ref={mapRef}
-          center={[16.047079, 108.206230]} // Default center Danang
+          center={[16.047079, 108.206230]} 
           zoom={6} 
           doubleClickZoom={false}
           style={{ width: '100%', height: '100%' }}
@@ -424,6 +596,47 @@ export default function LoveMap() {
             />
           )}
 
+          {/* Saved Selected Love Journey Path */}
+          {selectedJourney && selectedJourney.coords && selectedJourney.coords.length > 1 && (
+            <>
+              <Polyline
+                positions={selectedJourney.coords}
+                pathOptions={{
+                  color: '#06b6d4',
+                  weight: 4,
+                  className: 'love-journey-path'
+                }}
+              />
+              <Marker 
+                position={[selectedJourney.coords[0].lat, selectedJourney.coords[0].lng]}
+                icon={createStartEndIcon('🟢')}
+              />
+              <Marker 
+                position={[selectedJourney.coords[selectedJourney.coords.length - 1].lat, selectedJourney.coords[selectedJourney.coords.length - 1].lng]}
+                icon={createStartEndIcon('🏁')}
+              />
+            </>
+          )}
+
+          {/* Active Recording Love Journey Path */}
+          {isRecordingJourney && journeyCoords.length > 1 && (
+            <>
+              <Polyline
+                positions={journeyCoords}
+                pathOptions={{
+                  color: '#ef4444',
+                  dashArray: '4, 8',
+                  weight: 4,
+                  className: 'love-journey-path-active'
+                }}
+              />
+              <Marker 
+                position={[journeyCoords[0].lat, journeyCoords[0].lng]}
+                icon={createStartEndIcon('👣')}
+              />
+            </>
+          )}
+
           {/* Memory Pins */}
           {memories.map((m) => (
             <Marker
@@ -433,6 +646,7 @@ export default function LoveMap() {
               eventHandlers={{
                 click: () => {
                   setSelectedMemory(m);
+                  setSelectedJourney(null);
                 }
               }}
             />
@@ -465,9 +679,9 @@ export default function LoveMap() {
             initial={{ opacity: 0, y: 100 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: 100 }}
-            className="absolute bottom-4 left-4 right-4 z-[999] max-w-sm mx-auto"
+            className="absolute bottom-4 left-4 right-4 z-[999] max-w-sm mx-auto font-body"
           >
-            <div className="bg-white text-slate-800 p-4 rounded-xl shadow-2xl relative border border-slate-100 flex flex-col gap-3 font-body">
+            <div className="bg-white text-slate-800 p-4 rounded-xl shadow-2xl relative border border-slate-100 flex flex-col gap-3">
               {/* Close Button */}
               <button 
                 onClick={() => setSelectedMemory(null)}
@@ -525,47 +739,159 @@ export default function LoveMap() {
             </div>
           </motion.div>
         )}
+
+        {/* Selected Journey Path popover details */}
+        {selectedJourney && !selectedMemory && (
+          <motion.div
+            initial={{ opacity: 0, y: 100 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 100 }}
+            className="absolute bottom-4 left-4 right-4 z-[999] max-w-sm mx-auto font-body"
+          >
+            <div className="bg-white text-slate-800 p-4 rounded-xl shadow-2xl relative border border-slate-100 flex flex-col gap-2 text-left">
+              <button 
+                onClick={() => setSelectedJourney(null)}
+                className="absolute top-2 right-2 w-6 h-6 rounded-full bg-slate-100 flex items-center justify-center hover:bg-slate-200 transition-colors"
+              >
+                <X size={12} className="text-slate-500" />
+              </button>
+              
+              <div className="flex items-center gap-1.5 text-slate-400">
+                <Calendar size={11} />
+                <span className="text-[10px] font-semibold tracking-wider">
+                  {selectedJourney.date.split('-').reverse().join('/')}
+                </span>
+              </div>
+              
+              <h4 className="font-bold text-sm text-slate-800 mt-1">🗺️ {selectedJourney.title}</h4>
+              {selectedJourney.notes && <p className="text-xs text-slate-600 italic leading-relaxed mt-1">"{selectedJourney.notes}"</p>}
+              
+              <div className="flex items-center justify-between mt-2 pt-2 border-t border-slate-100">
+                <span className="text-[9px] px-2 py-0.5 rounded-full bg-cyan-100 text-cyan-700 font-bold">
+                  Lộ trình: {selectedJourney.coords.length} điểm mốc
+                </span>
+                <span className="text-[9px] text-slate-400">
+                  Ghi lại bởi: {profiles[selectedJourney.createdBy]?.display_name?.split(' ')[0] || selectedJourney.createdBy.split('@')[0]}
+                </span>
+              </div>
+              
+              {selectedJourney.createdBy === currentUser?.email?.toLowerCase() && (
+                <button
+                  onClick={() => handleDeleteJourney(selectedJourney.id)}
+                  className="mt-2 text-[10px] text-red-500 font-semibold flex items-center gap-1.5 self-end hover:underline"
+                >
+                  <Trash2 size={10} /> Xóa hành trình
+                </button>
+              )}
+            </div>
+          </motion.div>
+        )}
       </AnimatePresence>
 
-      {/* Directory Dialog Overlay */}
+      {/* Directory Dialog Overlay (Memories / Journeys) */}
       <Dialog open={showListDialog} onOpenChange={setShowListDialog}>
-        <DialogContent className="w-[95%] max-w-sm rounded-3xl p-5 liquid-glass-heavy border-none text-foreground max-h-[75vh] overflow-y-auto">
-          <DialogHeader className="pb-2 border-b border-white/10">
+        <DialogContent className="w-[95%] max-w-sm rounded-3xl p-5 liquid-glass-heavy border-none text-foreground max-h-[75vh] overflow-y-auto font-display">
+          <DialogHeader className="pb-2 border-b border-white/10 flex flex-row items-center justify-between space-y-0">
             <DialogTitle className="flex items-center gap-2 text-sm font-bold">
-              <BookOpen className="text-primary w-4.5 h-4.5" /> Danh sách địa điểm ({memories.length})
+              <BookOpen className="text-primary w-4.5 h-4.5" /> Danh mục tình yêu
             </DialogTitle>
           </DialogHeader>
 
+          {/* Directory Tabs */}
+          <div className="flex gap-2 p-1 bg-white/5 rounded-2xl border border-white/10 mt-3">
+            <button
+              onClick={() => setActiveListTab('memories')}
+              className={cn(
+                "flex-1 py-1.5 rounded-xl text-xs font-semibold transition-all",
+                activeListTab === 'memories'
+                  ? "gradient-primary text-white shadow"
+                  : "text-muted-foreground hover:text-foreground"
+              )}
+            >
+              Địa điểm ({memories.length})
+            </button>
+            <button
+              onClick={() => setActiveListTab('journeys')}
+              className={cn(
+                "flex-1 py-1.5 rounded-xl text-xs font-semibold transition-all",
+                activeListTab === 'journeys'
+                  ? "gradient-primary text-white shadow"
+                  : "text-muted-foreground hover:text-foreground"
+              )}
+            >
+              Hành trình ({savedJourneys.length})
+            </button>
+          </div>
+
+          {/* Tabs Content */}
           <div className="space-y-3 mt-4">
-            {memories.length === 0 ? (
-              <p className="text-xs text-muted-foreground text-center py-6">Chưa có địa điểm kỷ niệm nào.</p>
-            ) : (
-              [...memories].reverse().map(mem => (
-                <div 
-                  key={mem.id}
-                  onClick={() => {
-                    setShowListDialog(false);
-                    focusOnLocation(mem.latitude, mem.longitude, 15);
-                    setSelectedMemory(mem);
-                  }}
-                  className="flex gap-3 p-3 rounded-2xl bg-white/5 border border-white/10 hover:bg-white/10 transition-all cursor-pointer items-start active:scale-[0.98]"
-                >
-                  <div className="w-9 h-9 rounded-xl bg-primary/10 flex items-center justify-center text-lg flex-shrink-0">
-                    {mem.emoji || '📍'}
-                  </div>
-                  <div className="flex-1 min-w-0 text-left">
-                    <p className="text-xs font-semibold text-foreground line-clamp-2 leading-relaxed">"{mem.notes}"</p>
-                    <div className="flex items-center justify-between mt-2">
-                      <span className="text-[9px] text-muted-foreground">
-                        {mem.date.split('-').reverse().join('/')}
-                      </span>
-                      <span className="text-[9px] px-2 py-0.5 rounded-full bg-primary/20 text-primary font-bold">
-                        {profiles[mem.createdBy]?.display_name?.split(' ')[0] || mem.createdBy.split('@')[0]}
-                      </span>
+            {activeListTab === 'memories' ? (
+              memories.length === 0 ? (
+                <p className="text-xs text-muted-foreground text-center py-6">Chưa có địa điểm kỷ niệm nào.</p>
+              ) : (
+                [...memories].reverse().map(mem => (
+                  <div 
+                    key={mem.id}
+                    onClick={() => {
+                      setShowListDialog(false);
+                      focusOnLocation(mem.latitude, mem.longitude, 15);
+                      setSelectedMemory(mem);
+                      setSelectedJourney(null);
+                    }}
+                    className="flex gap-3 p-3 rounded-2xl bg-white/5 border border-white/10 hover:bg-white/10 transition-all cursor-pointer items-start active:scale-[0.98]"
+                  >
+                    <div className="w-9 h-9 rounded-xl bg-primary/10 flex items-center justify-center text-lg flex-shrink-0">
+                      {mem.emoji || '📍'}
+                    </div>
+                    <div className="flex-1 min-w-0 text-left font-body">
+                      <p className="text-xs font-semibold text-foreground line-clamp-2 leading-relaxed">"{mem.notes}"</p>
+                      <div className="flex items-center justify-between mt-2">
+                        <span className="text-[9px] text-muted-foreground">
+                          {mem.date.split('-').reverse().join('/')}
+                        </span>
+                        <span className="text-[9px] px-2 py-0.5 rounded-full bg-primary/20 text-primary font-bold">
+                          {profiles[mem.createdBy]?.display_name?.split(' ')[0] || mem.createdBy.split('@')[0]}
+                        </span>
+                      </div>
                     </div>
                   </div>
-                </div>
-              ))
+                ))
+              )
+            ) : (
+              savedJourneys.length === 0 ? (
+                <p className="text-xs text-muted-foreground text-center py-6">Chưa có hành trình di chuyển nào.</p>
+              ) : (
+                savedJourneys.map(jn => (
+                  <div
+                    key={jn.id}
+                    onClick={() => {
+                      setShowListDialog(false);
+                      if (jn.coords && jn.coords.length > 0) {
+                        focusOnLocation(jn.coords[0].lat, jn.coords[0].lng, 13);
+                      }
+                      setSelectedJourney(jn);
+                      setSelectedMemory(null);
+                    }}
+                    className="flex gap-3 p-3 rounded-2xl bg-white/5 border border-white/10 hover:bg-white/10 transition-all cursor-pointer items-start active:scale-[0.98]"
+                  >
+                    <div className="w-9 h-9 rounded-xl bg-cyan-500/10 text-cyan-400 flex items-center justify-center text-lg flex-shrink-0">
+                      🗺️
+                    </div>
+                    <div className="flex-1 min-w-0 text-left font-body">
+                      <p className="text-xs font-bold text-foreground truncate">{jn.title}</p>
+                      {jn.notes && <p className="text-[11px] text-muted-foreground truncate mt-0.5">"{jn.notes}"</p>}
+                      <div className="flex items-center justify-between mt-2">
+                        <span className="text-[9px] text-muted-foreground">
+                          {jn.date.split('-').reverse().join('/')}
+                        </span>
+                        <span className="text-[9px] px-2 py-0.5 rounded-full bg-cyan-500/20 text-cyan-400 font-bold">
+                          {profiles[jn.createdBy]?.display_name?.split(' ')[0] || jn.createdBy.split('@')[0]}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                ))
+              )
             )}
           </div>
         </DialogContent>
@@ -573,7 +899,7 @@ export default function LoveMap() {
 
       {/* Add Memory Dialog */}
       <Dialog open={showAddDialog} onOpenChange={setShowAddDialog}>
-        <DialogContent className="w-[90%] max-w-sm rounded-3xl p-5 liquid-glass-heavy border-none text-foreground">
+        <DialogContent className="w-[90%] max-w-sm rounded-3xl p-5 liquid-glass-heavy border-none text-foreground font-display">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-base font-bold">
               <Compass className="text-primary w-5 h-5 animate-spin-slow" /> Ghi dấu kỷ niệm mới
@@ -625,7 +951,7 @@ export default function LoveMap() {
                 value={noteText}
                 onChange={e => setNoteText(e.target.value)}
                 placeholder="Ví dụ: Lần đầu ăn thử phở cuốn ở đây, Quỳnh ăn liền một lúc 5 cái..."
-                className="w-full rounded-xl liquid-glass-sm bg-transparent border-transparent text-xs p-2.5 focus:outline-none focus:ring-1 focus:ring-primary leading-normal resize-none"
+                className="w-full rounded-xl liquid-glass-sm bg-transparent border-transparent text-xs p-2.5 focus:outline-none focus:ring-1 focus:ring-primary leading-normal resize-none font-body"
               />
             </div>
 
@@ -683,6 +1009,84 @@ export default function LoveMap() {
                 className="flex-1 h-9 rounded-xl text-xs font-semibold bg-white/5 hover:bg-white/10 text-muted-foreground border-transparent"
               >
                 Đóng
+              </Button>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Save Journey Dialog (Shown AFTER finishing journey) */}
+      <Dialog open={showJourneyDialog} onOpenChange={setShowJourneyDialog}>
+        <DialogContent className="w-[90%] max-w-sm rounded-3xl p-5 liquid-glass-heavy border-none text-foreground font-display">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-base font-bold text-cyan-400">
+              🗺️ Lưu hành trình mới
+            </DialogTitle>
+          </DialogHeader>
+
+          <form onSubmit={handleSaveJourney} className="space-y-4 mt-2">
+            <div className="p-3 rounded-2xl bg-cyan-500/10 border border-cyan-500/20 text-xs leading-relaxed text-cyan-300">
+              ✨ Hoàn thành hành trình! Hệ thống đã ghi nhận **{journeyCoords.length} điểm mốc** di chuyển của hai bạn. Hãy đặt tên để lưu lại nhé!
+            </div>
+
+            {/* Title input */}
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-muted-foreground">Tên hành trình</label>
+              <Input
+                required
+                value={journeyTitle}
+                onChange={e => setJourneyTitle(e.target.value)}
+                placeholder="Ví dụ: Phượt Ba Vì ngày mưa, Đi dạo Hồ Tây..."
+                className="liquid-glass-sm bg-transparent border-transparent h-9 text-xs"
+              />
+            </div>
+
+            {/* Date selector */}
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-muted-foreground">Ngày diễn ra</label>
+              <Input
+                type="date"
+                required
+                value={journeyDate}
+                onChange={e => setJourneyDate(e.target.value)}
+                className="liquid-glass-sm bg-transparent border-transparent h-9 text-xs"
+              />
+            </div>
+
+            {/* Notes input */}
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-muted-foreground">Cảm nghĩ/Ghi chú</label>
+              <textarea
+                rows={3}
+                value={journeyNotes}
+                onChange={e => setJourneyNotes(e.target.value)}
+                placeholder="Ví dụ: Đường đi hơi ướt nhưng rất vui, mua được quả ngô nướng siêu ngon..."
+                className="w-full rounded-xl liquid-glass-sm bg-transparent border-transparent text-xs p-2.5 focus:outline-none focus:ring-1 focus:ring-cyan-500 leading-normal resize-none font-body"
+              />
+            </div>
+
+            {/* Action buttons */}
+            <div className="flex gap-2 pt-2">
+              <Button
+                type="submit"
+                disabled={savingJourney}
+                className="flex-1 bg-cyan-500 hover:bg-cyan-600 text-white h-9 rounded-xl text-xs font-bold shadow-lg"
+              >
+                {savingJourney ? (
+                  <span className="flex items-center justify-center gap-1.5">
+                    <Loader2 size={12} className="animate-spin" /> Đang lưu...
+                  </span>
+                ) : 'Lưu lộ trình 🗺️'}
+              </Button>
+              <Button
+                type="button"
+                onClick={() => {
+                  setShowJourneyDialog(false);
+                  setJourneyCoords([]);
+                }}
+                className="flex-1 h-9 rounded-xl text-xs font-semibold bg-white/5 hover:bg-white/10 text-muted-foreground border-transparent"
+              >
+                Hủy bỏ
               </Button>
             </div>
           </form>

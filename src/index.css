@@ -856,3 +856,12 @@
 .my-emoji {
   font-size: 18px;
 }
+
+/* Custom glowing paths for Love Journeys */
+.love-journey-path {
+  filter: drop-shadow(0 0 6px rgba(6, 182, 212, 0.9));
+}
+
+.love-journey-path-active {
+  filter: drop-shadow(0 0 5px rgba(239, 68, 68, 0.8));
+}
