@@ -1,8 +1,11 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Play, Pause } from 'lucide-react';
+import { Play, Pause, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { timeAgo } from '@/lib/timeAgo';
+import { db } from '../../firebase';
+import { doc, onSnapshot, updateDoc } from 'firebase/firestore';
+import { useNavigate } from 'react-router-dom';
 
 const EMOJIS = ['❤️', '😂', '😮', '😢', '👍', '🙏'];
 
@@ -105,7 +108,50 @@ const MessageBubbleComponent = ({
   currentUserEmail,
   isLastRead
 }) => {
+  const navigate = useNavigate();
   const [showActions, setShowActions] = useState(false);
+  const [sessionStatus, setSessionStatus] = useState(null);
+
+  useEffect(() => {
+    if (message.media_type === 'music_invite' && message.invite_session_id) {
+      const unsub = onSnapshot(doc(db, 'listening_sessions', message.invite_session_id), (docSnap) => {
+        if (docSnap.exists()) {
+          setSessionStatus(docSnap.data().status);
+        } else {
+          setSessionStatus('not_found');
+        }
+      }, (err) => {
+        console.error("Error listening to session:", err);
+        setSessionStatus('not_found');
+      });
+      return () => unsub();
+    }
+  }, [message.media_type, message.invite_session_id]);
+
+  const handleAcceptInvite = async () => {
+    if (!message.invite_session_id) return;
+    try {
+      await updateDoc(doc(db, 'listening_sessions', message.invite_session_id), {
+        status: 'active',
+        updated_at: new Date()
+      });
+      navigate('/entertainment');
+    } catch(e) {
+      console.error(e);
+    }
+  };
+
+  const handleDeclineInvite = async () => {
+    if (!message.invite_session_id) return;
+    try {
+      await updateDoc(doc(db, 'listening_sessions', message.invite_session_id), {
+        status: 'declined',
+        updated_at: new Date()
+      });
+    } catch(e) {
+      console.error(e);
+    }
+  };
 
   // Group reactions for display
   const reactorEmails = message.reactions ? Object.keys(message.reactions) : [];
@@ -230,6 +276,60 @@ const MessageBubbleComponent = ({
           >
             {message.isDeleted ? (
               <span className="text-xs">Tin nhắn đã bị thu hồi</span>
+            ) : message.media_type === 'music_invite' ? (
+              <div className="flex flex-col gap-2 min-w-[200px] text-left">
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-full bg-black/10 dark:bg-white/10 flex items-center justify-center flex-shrink-0 animate-pulse text-sm">
+                    🎧
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-bold text-primary dark:text-primary-foreground">Lời mời nghe chung</p>
+                    <p className="text-[11px] text-muted-foreground truncate font-medium">{message.track?.ten_bai || 'Bài hát'}</p>
+                  </div>
+                </div>
+
+                <div className="text-[11px] border-t border-black/10 dark:border-white/10 pt-2 mt-1">
+                  {sessionStatus === 'inviting' ? (
+                    isMe ? (
+                      <p className="text-muted-foreground italic flex items-center gap-1.5">
+                        <Loader2 size={11} className="animate-spin" /> Đang chờ đối phương xác nhận...
+                      </p>
+                    ) : (
+                      <div className="space-y-2">
+                        <p className="font-medium text-muted-foreground">
+                          <span className="font-bold text-foreground">{message.host_name || 'Đối phương'}</span> muốn rủ bạn cùng nghe nhạc.
+                        </p>
+                        <div className="flex gap-1.5">
+                          <button 
+                            onClick={handleAcceptInvite} 
+                            className="flex-1 py-1.5 rounded-lg text-white font-semibold text-[10px] gradient-primary hover:opacity-90 active:scale-95 transition-all text-center"
+                          >
+                            Tham gia
+                          </button>
+                          <button 
+                            onClick={handleDeclineInvite} 
+                            className="flex-1 py-1.5 rounded-lg text-muted-foreground hover:bg-black/15 dark:hover:bg-white/15 text-[10px] bg-black/5 dark:bg-white/5 active:scale-95 transition-all text-center"
+                          >
+                            Bỏ qua
+                          </button>
+                        </div>
+                      </div>
+                    )
+                  ) : sessionStatus === 'active' ? (
+                    <p className="text-green-500 font-semibold flex items-center gap-1.5">
+                      <span>✅</span> Đã chấp nhận lời mời nghe chung
+                    </p>
+                  ) : sessionStatus === 'declined' ? (
+                    <p className="text-destructive font-semibold flex items-center gap-1.5">
+                      <span>❌</span> Đã từ chối lời mời nghe chung
+                    </p>
+                  ) : (
+                    <p className="text-muted-foreground font-medium flex items-center gap-1.5 italic">
+                      <span>⏹️</span> Lời mời nghe chung đã kết thúc
+                    </p>
+                  )}
+                </div>
+              </div>
             ) : (
               <>
                 {message.replyTo && (

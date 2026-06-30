@@ -327,6 +327,7 @@ export default function MusicTab({ tracks, onRefresh }) {
   const [showInviteModal, setShowInviteModal] = useState(false);
   const [activeSession, setActiveSession] = useState(null); // Host or Guest session details
   const [incomingInvite, setIncomingInvite] = useState(null);
+  const [declineNotify, setDeclineNotify] = useState(null);
 
   const fileRef = useRef();
   const coverFileRef = useRef();
@@ -378,6 +379,15 @@ export default function MusicTab({ tracks, onRefresh }) {
       clearPlayingStatus();
     };
   }, [isPlaying, nowPlaying, currentUser]);
+
+  useEffect(() => {
+    if (declineNotify) {
+      const timer = setTimeout(() => {
+        setDeclineNotify(null);
+      }, 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [declineNotify]);
 
   const formatTime = (secs) => {
     if (isNaN(secs)) return '0:00';
@@ -503,6 +513,10 @@ export default function MusicTab({ tracks, onRefresh }) {
           // Là Host
           if (data.status === 'inviting' || data.status === 'active') {
             activeHost = { role: 'host', id: doc.id, participant: data.participant_email, ...data, receivedAt: Date.now() };
+          } else if (data.status === 'declined') {
+            const name = profiles[data.participant_email.toLowerCase()] || data.participant_email.split('@')[0];
+            setDeclineNotify(`${name} đã từ chối nghe chung 😢`);
+            deleteDoc(doc.ref).catch(()=>{});
           }
         } else {
           // Là Guest
@@ -859,19 +873,21 @@ export default function MusicTab({ tracks, onRefresh }) {
   }, [nowPlaying, sendYouTubeCommand, activeSession, currentUser.email]);
 
   /* --- Listen Together Host Handlers --- */
-  const handleInviteFriend = async (friendEmail) => {
+  const handleInviteFriend = async (friendEmail, inviteMode) => {
     if (!nowPlaying) return;
-    const docId = [currentUser.email, friendEmail].sort().join('_');
+    const hostEmail = currentUser.email.toLowerCase();
+    const guestEmail = friendEmail.toLowerCase();
+    
+    // Generate a unique session ID
+    const sessionId = doc(collection(db, 'listening_sessions')).id;
     try {
-      await setDoc(doc(db, 'listening_sessions', docId), {
-        host_email: currentUser.email,
+      await setDoc(doc(db, 'listening_sessions', sessionId), {
+        host_email: hostEmail,
         host_name: currentUser.displayName?.split(' ')[0] || 'Bạn bè',
-        participant_email: friendEmail,
+        participant_email: guestEmail,
         participants: [
-          currentUser.email,
-          friendEmail,
-          currentUser.email.toLowerCase(),
-          friendEmail.toLowerCase()
+          hostEmail,
+          guestEmail
         ],
         status: 'inviting',
         track_id: nowPlaying.id,
@@ -883,9 +899,29 @@ export default function MusicTab({ tracks, onRefresh }) {
         started_at: serverTimestamp(),
         updated_at: serverTimestamp()
       });
+
+      // Gửi tin nhắn đặc biệt vào chat
+      const targetReceiver = inviteMode === 'global' ? 'global' : guestEmail;
+      await addDoc(collection(db, 'messages'), {
+        sender_email: currentUser.email,
+        receiver_email: targetReceiver,
+        created_date: serverTimestamp(),
+        media_type: 'music_invite',
+        invite_session_id: sessionId,
+        track: nowPlaying,
+        host_name: currentUser.displayName?.split(' ')[0] || 'Đối phương',
+        status: 'sent'
+      });
+
       setShowInviteModal(false);
-      setActiveSession({ role: 'host', id: docId, participant: friendEmail, receivedAt: Date.now() });
-      toast.success("Đã gửi lời mời nghe chung! 🎧");
+      setActiveSession({ 
+        role: 'host', 
+        id: sessionId, 
+        participant: friendEmail, 
+        receivedAt: Date.now(),
+        status: 'inviting'
+      });
+      toast.success("Đã gửi lời mời nghe chung vào chat! 🎧");
     } catch (e) {
       console.error(e);
       toast.error("Không thể gửi lời mời.");
@@ -1053,9 +1089,25 @@ export default function MusicTab({ tracks, onRefresh }) {
       </AnimatePresence>
 
       <div className="space-y-4">
-        {/* Active Session Host Banner */}
-        {activeSession?.role === 'host' && (
-          <div className="mx-2 mb-2 px-3 py-2 liquid-glass-sm rounded-xl flex items-center justify-between border border-primary/20 bg-primary/5">
+        {/* Active Session Host Banners */}
+        {activeSession?.role === 'host' && activeSession?.status === 'inviting' && (
+          <div className="mx-2 mb-2 px-3 py-2.5 liquid-glass-sm rounded-xl flex items-center justify-between border border-yellow-500/20 bg-yellow-500/5 animate-pulse">
+            <div className="flex items-center gap-2">
+              <Loader2 size={13} className="animate-spin text-yellow-500" />
+              <p className="text-xs font-medium">Đang chờ <span className="text-primary">{profiles[activeSession.participant.toLowerCase()] || activeSession.participant.split('@')[0]}</span> xác nhận...</p>
+            </div>
+            <button onClick={handleStopSession} className="text-[10px] uppercase font-bold text-destructive px-2 py-1 bg-destructive/10 rounded-lg hover:bg-destructive/20">Hủy</button>
+          </div>
+        )}
+
+        {declineNotify && (
+          <div className="mx-2 mb-2 px-3 py-2.5 liquid-glass-sm rounded-xl flex items-center justify-between border border-destructive/20 bg-destructive/5 text-destructive animate-bounce">
+            <p className="text-xs font-semibold">{declineNotify}</p>
+          </div>
+        )}
+
+        {activeSession?.role === 'host' && activeSession?.status === 'active' && (
+          <div className="mx-2 mb-2 px-3 py-2 liquid-glass-sm rounded-xl flex items-center justify-between border border-green-500/20 bg-green-500/5">
             <div className="flex items-center gap-2">
               <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
               <p className="text-xs font-medium">Đang phát cho: <span className="text-primary">{profiles[activeSession.participant.toLowerCase()] || activeSession.participant.split('@')[0]}</span></p>
@@ -1248,9 +1300,12 @@ export default function MusicTab({ tracks, onRefresh }) {
               <p className="text-sm text-muted-foreground text-center py-4">Bạn chưa có bạn bè nào.</p>
             ) : (
               friends.map(email => (
-                <div key={email} className="flex items-center justify-between p-3 rounded-xl bg-white/5 hover:bg-white/10 transition-colors">
-                  <p className="text-sm font-medium truncate flex-1">{profiles[email.toLowerCase()] || email.split('@')[0]}</p>
-                  <Button size="sm" onClick={() => handleInviteFriend(email)} className="h-8 rounded-lg gradient-primary text-xs">Mời</Button>
+                <div key={email} className="flex flex-col gap-2.5 p-3 rounded-2xl bg-white/5 border border-white/10">
+                  <p className="text-sm font-semibold truncate text-foreground">{profiles[email.toLowerCase()] || email.split('@')[0]}</p>
+                  <div className="flex gap-2">
+                    <Button size="sm" onClick={() => handleInviteFriend(email, 'direct')} className="flex-1 h-8 rounded-xl bg-primary/10 text-primary border border-primary/20 hover:bg-primary/20 text-xs font-semibold">Gửi Chat Riêng</Button>
+                    <Button size="sm" onClick={() => handleInviteFriend(email, 'global')} className="flex-1 h-8 rounded-xl gradient-primary text-white text-xs font-semibold">Gửi Chat Chung</Button>
+                  </div>
                 </div>
               ))
             )}

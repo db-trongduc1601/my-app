@@ -9,7 +9,7 @@ import FriendsSidebar from '@/components/friends/FriendsSidebar';
 import ProfileEditorModal from '@/components/profile/ProfileEditorModal';
 import { AnimatePresence } from 'framer-motion';
 import { auth, db } from '../firebase';
-import { collection, query, where, onSnapshot } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, doc, updateDoc } from 'firebase/firestore';
 import { signOut, onAuthStateChanged } from 'firebase/auth';
 import { useToast } from "@/components/ui/use-toast";
 import { toast as sonnerToast } from 'sonner';
@@ -27,6 +27,7 @@ export default function Layout() {
   const { toast } = useToast();
   const [showNotificationPrompt, setShowNotificationPrompt] = useState(false);
   const { totalUnreadCount, globalUnreadCount } = useAuth();
+  const [globalInvite, setGlobalInvite] = useState(null);
   
   // Lắng nghe thay đổi User Auth (Kể cả khi F5) và lưu local state
   const [localUser, setLocalUser] = useState(auth.currentUser);
@@ -44,44 +45,28 @@ export default function Layout() {
 
     const myEmailLower = localUser.email.toLowerCase();
 
-    // Query only by participants (index-free query), filter status client-side
     const q = query(
       collection(db, 'listening_sessions'),
       where('participants', 'array-contains', myEmailLower)
     );
 
-    const activeToasts = new Set();
-
     const unsubscribe = onSnapshot(q, (snapshot) => {
+      let activeInvite = null;
       snapshot.docs.forEach(doc => {
         const data = doc.data();
         const hostEmailLower = data.host_email?.toLowerCase();
         
         if (data.status === 'inviting' && hostEmailLower !== myEmailLower) {
-          // It's an incoming invite from the host
-          const inviteId = doc.id;
-          if (!activeToasts.has(inviteId)) {
-            activeToasts.add(inviteId);
-            sonnerToast.info(`🎧 Lời mời nghe chung!`, {
-              description: `${data.host_name} muốn rủ bạn cùng nghe bài "${data.track?.ten_bai}".`,
-              action: {
-                label: 'Tham gia',
-                onClick: () => {
-                  navigate('/entertainment');
-                }
-              },
-              duration: 12000,
-              onDismiss: () => activeToasts.delete(inviteId)
-            });
-          }
+          activeInvite = { id: doc.id, ...data };
         }
       });
+      setGlobalInvite(activeInvite);
     }, (error) => {
       console.error("Firestore global invite listener error:", error);
     });
 
     return () => unsubscribe();
-  }, [localUser, navigate]);
+  }, [localUser]);
 
   useEffect(() => {
     // Chỉ hiển thị nếu trình duyệt hỗ trợ Notification và quyền hiện tại là default
@@ -240,6 +225,65 @@ export default function Layout() {
 
       {/* iOS-26 Liquid Glass Bottom Navigation */}
       <BottomNav />
+
+      {/* Global Listen Together Invite Card (Floating) */}
+      <AnimatePresence>
+        {globalInvite && location.pathname !== '/entertainment' && (
+          <motion.div
+            initial={{ opacity: 0, y: 50, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 20, scale: 0.95 }}
+            className="fixed bottom-24 left-4 right-4 z-[9999] mx-auto max-w-sm"
+          >
+            <div className="liquid-glass border-primary/40 p-4 rounded-3xl shadow-2xl flex flex-col gap-3 bg-[#181116]/85 backdrop-blur-xl text-white rim-light">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-full bg-primary/20 flex items-center justify-center flex-shrink-0 animate-pulse text-lg">
+                  🎧
+                </div>
+                <div className="flex-1 min-w-0 text-left">
+                  <p className="font-bold text-sm text-foreground flex items-center gap-1.5">
+                    Lời mời nghe chung <span className="text-xs">🎧</span>
+                  </p>
+                  <p className="text-xs text-muted-foreground leading-normal mt-0.5">
+                    <span className="font-bold text-foreground">{globalInvite.host_name}</span> muốn rủ bạn cùng nghe bài <span className="text-primary font-medium">{globalInvite.track?.ten_bai}</span>
+                  </p>
+                </div>
+              </div>
+              <div className="flex gap-2 mt-1">
+                <button
+                  onClick={async () => {
+                    try {
+                      await updateDoc(doc(db, 'listening_sessions', globalInvite.id), {
+                        status: 'active',
+                        updated_at: new Date()
+                      });
+                      setGlobalInvite(null);
+                      navigate('/entertainment');
+                    } catch(e) {}
+                  }}
+                  className="flex-1 py-2.5 rounded-2xl text-white font-bold text-sm gradient-primary shadow-lg hover:opacity-90 active:scale-95 transition-all text-center"
+                >
+                  Tham gia ngay
+                </button>
+                <button
+                  onClick={async () => {
+                    try {
+                      await updateDoc(doc(db, 'listening_sessions', globalInvite.id), {
+                        status: 'declined',
+                        updated_at: new Date()
+                      });
+                      setGlobalInvite(null);
+                    } catch(e) {}
+                  }}
+                  className="flex-1 py-2.5 rounded-2xl text-muted-foreground hover:bg-white/10 text-sm font-semibold bg-white/5 active:scale-95 transition-all text-center"
+                >
+                  Bỏ qua
+                </button>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Global Chat */}
       <AnimatePresence>
