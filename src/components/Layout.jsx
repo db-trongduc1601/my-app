@@ -42,10 +42,12 @@ export default function Layout() {
   useEffect(() => {
     if (!localUser || !localUser.email) return;
 
+    const myEmailLower = localUser.email.toLowerCase();
+
+    // Query only by participants (index-free query), filter status client-side
     const q = query(
       collection(db, 'listening_sessions'),
-      where('participants', 'array-contains', localUser.email),
-      where('status', '==', 'inviting')
+      where('participants', 'array-contains', myEmailLower)
     );
 
     const activeToasts = new Set();
@@ -53,7 +55,9 @@ export default function Layout() {
     const unsubscribe = onSnapshot(q, (snapshot) => {
       snapshot.docs.forEach(doc => {
         const data = doc.data();
-        if (data.host_email !== localUser.email) {
+        const hostEmailLower = data.host_email?.toLowerCase();
+        
+        if (data.status === 'inviting' && hostEmailLower !== myEmailLower) {
           // It's an incoming invite from the host
           const inviteId = doc.id;
           if (!activeToasts.has(inviteId)) {
@@ -68,10 +72,11 @@ export default function Layout() {
               },
               duration: 12000,
               onDismiss: () => activeToasts.delete(inviteId)
-            });
           }
         }
       });
+    }, (error) => {
+      console.error("Firestore global invite listener error:", error);
     });
 
     return () => unsubscribe();

@@ -490,7 +490,7 @@ export default function MusicTab({ tracks, onRefresh }) {
     if (!currentUser) return;
     const q = query(
       collection(db, 'listening_sessions'), 
-      where('participants', 'array-contains', currentUser.email)
+      where('participants', 'array-contains', currentUser.email.toLowerCase())
     );
     const unsub = onSnapshot(q, (snapshot) => {
       let invite = null;
@@ -867,7 +867,12 @@ export default function MusicTab({ tracks, onRefresh }) {
         host_email: currentUser.email,
         host_name: currentUser.displayName?.split(' ')[0] || 'Bạn bè',
         participant_email: friendEmail,
-        participants: [currentUser.email, friendEmail],
+        participants: [
+          currentUser.email,
+          friendEmail,
+          currentUser.email.toLowerCase(),
+          friendEmail.toLowerCase()
+        ],
         status: 'inviting',
         track_id: nowPlaying.id,
         track: nowPlaying,
