@@ -16,7 +16,7 @@ import { useNotifications } from '@/hooks/useNotifications';
 
 const Food = lazy(() => import('@/pages/Food'));
 const Vault = lazy(() => import('@/pages/Vault'));
-const Quests = lazy(() => import('@/pages/Quests'));
+const LoveMap = lazy(() => import('@/pages/LoveMap'));
 const Entertainment = lazy(() => import('@/pages/Entertainment'));
 
 const AuthenticatedApp = () => {
@@ -47,7 +47,7 @@ const AuthenticatedApp = () => {
           <Route path="/" element={<Home />} />
           <Route path="/food" element={<Food />} />
           <Route path="/vault" element={<Vault />} />
-          <Route path="/quests" element={<Quests />} />
+          <Route path="/lovemap" element={<LoveMap />} />
           <Route path="/entertainment" element={<Entertainment />} />
         </Route>
         <Route path="*" element={<PageNotFound />} />

@@ -640,3 +640,156 @@
   opacity: 1;
   max-height: 14px;
 }
+
+/* ==========================================================================
+   Love Map (Bản Đồ Kỷ Niệm) Custom Styles
+   ========================================================================== */
+
+/* CartoDB Map Pastel Grayscale / Pink-Tint Filter */
+.love-map-container .leaflet-tile-pane {
+  filter: grayscale(0.2) sepia(0.15) hue-rotate(320deg) brightness(1.02) contrast(0.98);
+  transition: filter 0.3s ease;
+}
+
+.dark .love-map-container .leaflet-tile-pane {
+  filter: invert(1) hue-rotate(180deg) grayscale(0.4) sepia(0.2) hue-rotate(320deg) brightness(0.9) contrast(0.95);
+}
+
+/* Custom Leaflet Map Container styling */
+.love-map-container .leaflet-container {
+  background: transparent !important;
+  font-family: inherit;
+}
+
+/* Custom glowing journey line */
+.love-path-glow {
+  filter: drop-shadow(0 0 5px rgba(244, 114, 152, 0.8));
+}
+
+/* Custom Div Memory Marker Styles */
+.love-map-custom-marker {
+  background: transparent !important;
+  border: none !important;
+}
+
+.marker-pulse-wrapper {
+  position: relative;
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.marker-pulse-ring {
+  position: absolute;
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  border: 2px solid hsl(340, 97%, 64%);
+  animation: marker-pulse 2s infinite ease-out;
+  pointer-events: none;
+}
+
+@keyframes marker-pulse {
+  0% {
+    transform: scale(0.85);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1.6);
+    opacity: 0;
+  }
+}
+
+.marker-avatar-container {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: white;
+  border: 2px solid hsl(340, 97%, 64%);
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 12px rgba(244, 114, 152, 0.3);
+  z-index: 2;
+  transition: transform 0.2s ease;
+}
+
+.marker-avatar-container:hover {
+  transform: scale(1.15);
+}
+
+.marker-avatar {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.marker-emoji {
+  font-size: 16px;
+}
+
+/* Custom Div Realtime Partner Marker Styles */
+.love-map-partner-marker {
+  background: transparent !important;
+  border: none !important;
+}
+
+.partner-pulse-wrapper {
+  position: relative;
+  width: 46px;
+  height: 46px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.partner-pulse-ring {
+  position: absolute;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  border: 2px dashed #3b82f6;
+  animation: partner-pulse 2.2s infinite linear;
+  pointer-events: none;
+}
+
+@keyframes partner-pulse {
+  0% {
+    transform: rotate(0deg) scale(0.9);
+    opacity: 0.9;
+  }
+  50% {
+    opacity: 0.5;
+  }
+  100% {
+    transform: rotate(360deg) scale(1.4);
+    opacity: 0;
+  }
+}
+
+.partner-avatar-container {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  background: white;
+  border: 2.5px solid #3b82f6;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 14px rgba(59, 130, 246, 0.4);
+  z-index: 2;
+}
+
+.partner-avatar {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.partner-emoji {
+  font-size: 18px;
+}
