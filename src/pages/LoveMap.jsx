@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { MapContainer, TileLayer, Marker, Polyline, useMapEvents } from 'react-leaflet';
+import { MapContainer, TileLayer, Marker, Polyline } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { db, storage, auth } from '../firebase';
@@ -26,7 +26,8 @@ import {
   Trash2, 
   Maximize2, 
   Loader2, 
-  Compass 
+  Compass,
+  BookOpen
 } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
@@ -46,18 +47,9 @@ const EMOJIS = [
   { char: '💖', label: 'Hẹn hò' }
 ];
 
-// Inner helper component to capture double clicks on Leaflet map
-function MapEvents({ onMapDoubleClick }) {
-  useMapEvents({
-    dblclick(e) {
-      onMapDoubleClick(e.latlng);
-    }
-  });
-  return null;
-}
-
 export default function LoveMap() {
   const currentUser = auth.currentUser;
+  const mapRef = useRef(null);
   const [memories, setMemories] = useState([]);
   const [profiles, setProfiles] = useState({});
   const [selectedMemory, setSelectedMemory] = useState(null);
@@ -65,6 +57,7 @@ export default function LoveMap() {
   // Realtime location states
   const [isSharingLocation, setIsSharingLocation] = useState(false);
   const [partnerLocation, setPartnerLocation] = useState(null);
+  const [myLocation, setMyLocation] = useState(null);
   const watchIdRef = useRef(null);
 
   // Form Dialog states
@@ -75,6 +68,9 @@ export default function LoveMap() {
   const [memoryDate, setMemoryDate] = useState(() => new Date().toISOString().split('T')[0]);
   const [photoFile, setPhotoFile] = useState(null);
   const [uploading, setUploading] = useState(false);
+
+  // Directory overlay state
+  const [showListDialog, setShowListDialog] = useState(false);
 
   // Polaroid fullscreen states
   const [zoomImage, setZoomImage] = useState(null);
@@ -134,6 +130,26 @@ export default function LoveMap() {
     };
   }, [profiles, currentUser]);
 
+  const focusOnLocation = (lat, lng, zoom = 15) => {
+    if (mapRef.current) {
+      mapRef.current.setView([lat, lng], zoom);
+    }
+  };
+
+  const handleLocUpdate = (position) => {
+    const { latitude, longitude } = position.coords;
+    setMyLocation({ lat: latitude, lng: longitude });
+    if (currentUser) {
+      setDoc(doc(db, 'user_locations', currentUser.email.toLowerCase()), {
+        email: currentUser.email,
+        latitude,
+        longitude,
+        status: 'active',
+        updatedAt: serverTimestamp()
+      }, { merge: true }).catch(() => {});
+    }
+  };
+
   // Turn ON / OFF realtime location tracking
   const toggleLocationSharing = () => {
     if (isSharingLocation) {
@@ -143,6 +159,7 @@ export default function LoveMap() {
         watchIdRef.current = null;
       }
       setIsSharingLocation(false);
+      setMyLocation(null);
       if (currentUser) {
         setDoc(doc(db, 'user_locations', currentUser.email.toLowerCase()), {
           status: 'inactive',
@@ -160,21 +177,16 @@ export default function LoveMap() {
       setIsSharingLocation(true);
       toast.success("Đang kích hoạt định vị thực tế...");
 
-      const handleLocUpdate = (position) => {
-        const { latitude, longitude } = position.coords;
-        if (currentUser) {
-          setDoc(doc(db, 'user_locations', currentUser.email.toLowerCase()), {
-            email: currentUser.email,
-            latitude,
-            longitude,
-            status: 'active',
-            updatedAt: serverTimestamp()
-          }, { merge: true }).catch(() => {});
-        }
-      };
-
       // Get initial and start watching
-      navigator.geolocation.getCurrentPosition(handleLocUpdate, (err) => console.error(err), { enableHighAccuracy: true });
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          handleLocUpdate(position);
+          focusOnLocation(position.coords.latitude, position.coords.longitude, 12);
+        }, 
+        (err) => console.error(err), 
+        { enableHighAccuracy: true }
+      );
+
       watchIdRef.current = navigator.geolocation.watchPosition(
         handleLocUpdate,
         (err) => {
@@ -186,13 +198,31 @@ export default function LoveMap() {
     }
   };
 
-  const handleMapDoubleClick = (latlng) => {
-    setClickCoords(latlng);
-    setSelectedEmoji('💖');
-    setNoteText('');
-    setPhotoFile(null);
-    setMemoryDate(new Date().toISOString().split('T')[0]);
-    setShowAddDialog(true);
+  // Mark current position and open memory form
+  const handleMarkCurrentLocation = () => {
+    if (!('geolocation' in navigator)) {
+      toast.error("Trình duyệt không hỗ trợ định vị!");
+      return;
+    }
+    
+    toast.success("Đang xác định vị trí hiện tại của bạn...");
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        const { latitude, longitude } = position.coords;
+        setClickCoords({ lat: latitude, lng: longitude });
+        setSelectedEmoji('💖');
+        setNoteText('');
+        setPhotoFile(null);
+        setMemoryDate(new Date().toISOString().split('T')[0]);
+        setShowAddDialog(true);
+        focusOnLocation(latitude, longitude, 15);
+      },
+      (err) => {
+        console.error(err);
+        toast.error("Không thể lấy vị trí hiện tại. Vui lòng bật định vị thiết bị!");
+      },
+      { enableHighAccuracy: true }
+    );
   };
 
   const handleSaveMemory = async (e) => {
@@ -265,7 +295,30 @@ export default function LoveMap() {
     });
   };
 
-  // Build custom icon for partner's live position
+  // Build custom icon for own location marker (pink pulse)
+  const createMyLocationIcon = (email) => {
+    const profile = profiles[email?.toLowerCase()];
+    const avatarUrl = profile?.photo_url;
+
+    return L.divIcon({
+      className: 'love-map-my-marker',
+      html: `
+        <div class="my-pulse-wrapper">
+          <div class="my-pulse-ring"></div>
+          <div class="my-avatar-container animate-bounce">
+            ${avatarUrl 
+              ? `<img src="${avatarUrl}" class="my-avatar" />` 
+              : `<span class="my-emoji">🧭</span>`
+            }
+          </div>
+        </div>
+      `,
+      iconSize: [46, 46],
+      iconAnchor: [23, 46]
+    });
+  };
+
+  // Build custom icon for partner's live position (blue pulse)
   const createPartnerLocationIcon = (email) => {
     const partnerProfile = profiles[email?.toLowerCase()];
     const avatarUrl = partnerProfile?.photo_url;
@@ -293,39 +346,61 @@ export default function LoveMap() {
 
   return (
     <div className="flex flex-col h-[calc(100vh-140px)] w-full relative love-map-container no-scrollbar overflow-hidden">
-      {/* Map Header */}
+      {/* Map Header Controls */}
       <div className="absolute top-4 left-4 right-4 z-[999] flex items-center justify-between pointer-events-none">
         <div className="liquid-glass rim-light px-4 py-2 flex items-center gap-2 pointer-events-auto shadow-lg">
           <MapPin className="text-primary w-4 h-4" />
-          <span className="font-semibold text-xs text-foreground text-glow">Love Map (Bản Đồ Kỷ Niệm)</span>
+          <span className="font-semibold text-xs text-foreground text-glow font-display">Love Map</span>
         </div>
 
-        {/* Temporary location sharing button */}
-        <button
-          onClick={toggleLocationSharing}
-          className={cn(
-            "liquid-glass rim-light p-2.5 rounded-full pointer-events-auto transition-all duration-300 shadow-lg active:scale-95",
-            isSharingLocation 
-              ? "gradient-primary text-white border-transparent liquid-glow" 
-              : "text-muted-foreground hover:text-foreground"
-          )}
-          title={isSharingLocation ? "Tắt định vị" : "Bật định vị"}
-        >
-          <Navigation className={cn("w-4 h-4", isSharingLocation && "animate-pulse")} />
-        </button>
+        {/* Action controls */}
+        <div className="flex items-center gap-2 pointer-events-auto">
+          {/* List memories button */}
+          <button
+            onClick={() => setShowListDialog(true)}
+            className="liquid-glass rim-light p-2.5 rounded-full text-muted-foreground hover:text-foreground transition-all duration-300 shadow-lg active:scale-95 bg-[#181116]/80 backdrop-blur-md"
+            title="Danh sách kỷ niệm"
+          >
+            <BookOpen className="w-4 h-4" />
+          </button>
+
+          {/* Mark current location button */}
+          <button
+            onClick={handleMarkCurrentLocation}
+            className="liquid-glass rim-light p-2.5 rounded-full text-muted-foreground hover:text-foreground transition-all duration-300 shadow-lg active:scale-95 bg-[#181116]/80 backdrop-blur-md"
+            title="Ghim vị trí hiện tại"
+          >
+            <Plus className="w-4 h-4" />
+          </button>
+
+          {/* Location sharing toggle */}
+          <button
+            onClick={toggleLocationSharing}
+            className={cn(
+              "liquid-glass rim-light p-2.5 rounded-full transition-all duration-300 shadow-lg active:scale-95",
+              isSharingLocation 
+                ? "gradient-primary text-white border-transparent liquid-glow" 
+                : "text-muted-foreground hover:text-foreground bg-[#181116]/80 backdrop-blur-md"
+            )}
+            title={isSharingLocation ? "Tắt định vị" : "Bật định vị"}
+          >
+            <Navigation className={cn("w-4 h-4", isSharingLocation && "animate-pulse")} />
+          </button>
+        </div>
       </div>
 
       {/* Instructions Overlay */}
       <div className="absolute bottom-4 left-4 z-[999] pointer-events-none max-w-[200px]">
         <div className="liquid-glass rim-light p-2 text-[10px] text-muted-foreground leading-normal pointer-events-auto">
-          💡 **Mẹo**: Nhấp đúp (Double click) vào bất kỳ điểm nào trên bản đồ để ghim kỷ niệm mới của hai đứa.
+          💡 **Mẹo**: Nhấn nút `+` ở góc trên để đánh dấu vị trí hiện tại của bạn vào bản đồ kỷ niệm.
         </div>
       </div>
 
       {/* Leaflet Map */}
       <div className="flex-1 w-full h-full relative z-0 rounded-3xl overflow-hidden shadow-inner border border-white/20">
         <MapContainer 
-          center={[16.047079, 108.206230]} // Default center to Danang, Vietnam
+          ref={mapRef}
+          center={[16.047079, 108.206230]} // Default center Danang
           zoom={6} 
           doubleClickZoom={false}
           style={{ width: '100%', height: '100%' }}
@@ -335,9 +410,6 @@ export default function LoveMap() {
             attribution='&copy; <a href="https://carto.com/">CartoDB</a>'
             url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png"
           />
-
-          {/* Map Double click event handler */}
-          <MapEvents onMapDoubleClick={handleMapDoubleClick} />
 
           {/* Chronological Journey Paths (Love Path) */}
           {pathPositions.length > 1 && (
@@ -365,6 +437,14 @@ export default function LoveMap() {
               }}
             />
           ))}
+
+          {/* currentUser Own Realtime Position Pin */}
+          {isSharingLocation && myLocation && (
+            <Marker
+              position={[myLocation.lat, myLocation.lng]}
+              icon={createMyLocationIcon(currentUser?.email || '')}
+            />
+          )}
 
           {/* Partner Realtime Position Pin */}
           {partnerLocation && (
@@ -446,6 +526,50 @@ export default function LoveMap() {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Directory Dialog Overlay */}
+      <Dialog open={showListDialog} onOpenChange={setShowListDialog}>
+        <DialogContent className="w-[95%] max-w-sm rounded-3xl p-5 liquid-glass-heavy border-none text-foreground max-h-[75vh] overflow-y-auto">
+          <DialogHeader className="pb-2 border-b border-white/10">
+            <DialogTitle className="flex items-center gap-2 text-sm font-bold">
+              <BookOpen className="text-primary w-4.5 h-4.5" /> Danh sách địa điểm ({memories.length})
+            </DialogTitle>
+          </DialogHeader>
+
+          <div className="space-y-3 mt-4">
+            {memories.length === 0 ? (
+              <p className="text-xs text-muted-foreground text-center py-6">Chưa có địa điểm kỷ niệm nào.</p>
+            ) : (
+              [...memories].reverse().map(mem => (
+                <div 
+                  key={mem.id}
+                  onClick={() => {
+                    setShowListDialog(false);
+                    focusOnLocation(mem.latitude, mem.longitude, 15);
+                    setSelectedMemory(mem);
+                  }}
+                  className="flex gap-3 p-3 rounded-2xl bg-white/5 border border-white/10 hover:bg-white/10 transition-all cursor-pointer items-start active:scale-[0.98]"
+                >
+                  <div className="w-9 h-9 rounded-xl bg-primary/10 flex items-center justify-center text-lg flex-shrink-0">
+                    {mem.emoji || '📍'}
+                  </div>
+                  <div className="flex-1 min-w-0 text-left">
+                    <p className="text-xs font-semibold text-foreground line-clamp-2 leading-relaxed">"{mem.notes}"</p>
+                    <div className="flex items-center justify-between mt-2">
+                      <span className="text-[9px] text-muted-foreground">
+                        {mem.date.split('-').reverse().join('/')}
+                      </span>
+                      <span className="text-[9px] px-2 py-0.5 rounded-full bg-primary/20 text-primary font-bold">
+                        {profiles[mem.createdBy]?.display_name?.split(' ')[0] || mem.createdBy.split('@')[0]}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Add Memory Dialog */}
       <Dialog open={showAddDialog} onOpenChange={setShowAddDialog}>
