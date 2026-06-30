@@ -72,6 +72,7 @@ export default function Layout() {
               },
               duration: 12000,
               onDismiss: () => activeToasts.delete(inviteId)
+            });
           }
         }
       });
