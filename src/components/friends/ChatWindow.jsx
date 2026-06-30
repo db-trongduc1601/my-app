@@ -234,7 +234,15 @@ export default function ChatWindow({ friend, currentUser, onBack }) {
         <div className="flex-1 min-w-0">
           <p className="font-semibold text-sm truncate">{displayName}</p>
           {isOnline ? (
-            <p className="text-[11px] font-medium text-green-500">Đang hoạt động</p>
+            <div className="flex flex-col">
+              <span className="text-[11px] font-medium text-green-500 leading-tight">Đang hoạt động</span>
+              {friendPresence?.listening_to && (
+                <div className="flex items-center gap-1 text-[10px] text-pink-500 dark:text-pink-400 animate-pulse truncate max-w-[220px] mt-0.5">
+                  <span className="animate-spin-slow text-xs">💿</span>
+                  <span className="truncate font-medium">{displayName} đang nghe: {friendPresence.listening_to.ten_bai} - {friendPresence.listening_to.ca_si} 🎶</span>
+                </div>
+              )}
+            </div>
           ) : (
             <p className="text-[11px] text-muted-foreground truncate">{lastActiveText}</p>
           )}

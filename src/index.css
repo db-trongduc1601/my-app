@@ -283,6 +283,34 @@
   50% { transform: translateY(-6px); }
 }
 
+/* Vinyl ambient glow */
+@keyframes vinyl-glow {
+  0%, 100% {
+    background-position: 0% 50%;
+    transform: scale(0.98);
+    filter: blur(15px);
+    opacity: 0.65;
+  }
+  50% {
+    background-position: 100% 50%;
+    transform: scale(1.04);
+    filter: blur(25px);
+    opacity: 0.9;
+  }
+}
+.animate-vinyl-glow {
+  animation: vinyl-glow 4s ease-in-out infinite;
+}
+
+/* Spinning slowly for mini-record status */
+@keyframes spin-slow {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+.animate-spin-slow {
+  animation: spin-slow 5s linear infinite;
+}
+
 /* Shimmer — light sweep across glass edge */
 .animate-shimmer::after {
   content: '';

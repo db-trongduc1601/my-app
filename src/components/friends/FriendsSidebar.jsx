@@ -491,13 +491,19 @@ export default function FriendsSidebar({ open, onClose, currentUser }) {
                                 )}
                               </div>
                             )}
-                            <div className="flex items-center gap-1.5 mt-0.5">
+                            <div className="flex flex-col gap-0.5 mt-0.5 min-w-0">
                               {isOnline ? (
                                 <span className="text-[10px] font-semibold text-green-500">Đang hoạt động</span>
                               ) : lastActiveText ? (
                                 <span className="text-[10px] text-muted-foreground">{lastActiveText}</span>
                               ) : (
                                 <span className="text-[10px] text-muted-foreground truncate">{f.email}</span>
+                              )}
+                              {isOnline && profile?.listening_to && (
+                                <div className="flex items-center gap-1 text-[9px] font-medium text-pink-500 dark:text-pink-400 animate-pulse truncate pr-1">
+                                  <span className="animate-spin-slow">💿</span>
+                                  <span className="truncate">Đang nghe: {profile.listening_to.ten_bai}</span>
+                                </div>
                               )}
                             </div>
                           </div>

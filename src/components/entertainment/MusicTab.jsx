@@ -2,7 +2,7 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import { Music, Plus, Loader2, Link2, Upload, Trash2, Pause, Play, Users, X, Headphones } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { db, storage, auth } from '../../firebase';
-import { collection, doc, addDoc, deleteDoc, setDoc, onSnapshot, query, where, getDocs, serverTimestamp } from 'firebase/firestore';
+import { collection, doc, addDoc, deleteDoc, setDoc, onSnapshot, query, where, getDocs, serverTimestamp, updateDoc } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -46,7 +46,22 @@ function VinylPlayer({
   return (
     <div className="flex flex-col items-center gap-4 w-full">
       {/* Disc */}
-      <div className="relative" style={{ width: 200, height: 200 }}>
+      <div className="relative flex items-center justify-center" style={{ width: 220, height: 220 }}>
+        {/* Ambient Glow behind the disc */}
+        {isPlaying && (
+          <div
+            className="absolute animate-vinyl-glow"
+            style={{
+              width: 190,
+              height: 190,
+              borderRadius: '50%',
+              background: 'linear-gradient(45deg, #ff007f, #7f00ff, #00f0ff, #ff007f)',
+              backgroundSize: '400% 400%',
+              zIndex: 0,
+            }}
+          />
+        )}
+
         {/* Spinning disc */}
         <div
           style={{
@@ -60,6 +75,7 @@ function VinylPlayer({
             willChange: 'transform',
             transform: 'translate3d(0, 0, 0)',
             backfaceVisibility: 'hidden',
+            zIndex: 1,
           }}
         >
           {/* Grooves */}
@@ -320,6 +336,48 @@ export default function MusicTab({ tracks, onRefresh }) {
   const sessionSyncInterval = useRef();
 
   const currentUser = auth.currentUser;
+
+  // Đồng bộ trạng thái nghe nhạc (Music Status Sync) lên user_profiles
+  useEffect(() => {
+    if (!currentUser || !currentUser.email) return;
+
+    const updatePlayingStatus = async () => {
+      try {
+        const q = query(collection(db, 'user_profiles'), where('email', '==', currentUser.email));
+        const snap = await getDocs(q);
+        if (!snap.empty) {
+          const profileDoc = snap.docs[0];
+          await updateDoc(doc(db, 'user_profiles', profileDoc.id), {
+            listening_to: isPlaying && nowPlaying ? {
+              ten_bai: nowPlaying.ten_bai || '',
+              ca_si: nowPlaying.nghe_si || nowPlaying.ca_si || '',
+              updatedAt: new Date().toISOString()
+            } : null
+          });
+        }
+      } catch (err) {
+        console.error("Lỗi cập nhật trạng thái nghe nhạc:", err);
+      }
+    };
+
+    updatePlayingStatus();
+
+    return () => {
+      const clearPlayingStatus = async () => {
+        try {
+          const q = query(collection(db, 'user_profiles'), where('email', '==', currentUser.email));
+          const snap = await getDocs(q);
+          if (!snap.empty) {
+            const profileDoc = snap.docs[0];
+            await updateDoc(doc(db, 'user_profiles', profileDoc.id), {
+              listening_to: null
+            });
+          }
+        } catch (e) {}
+      };
+      clearPlayingStatus();
+    };
+  }, [isPlaying, nowPlaying, currentUser]);
 
   const formatTime = (secs) => {
     if (isNaN(secs)) return '0:00';

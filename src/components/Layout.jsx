@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Outlet, useLocation } from 'react-router-dom';
+import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { MessageCircle, Users } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import TopBar from '@/components/TopBar';
@@ -8,9 +8,11 @@ import GlobalChat from '@/components/GlobalChat';
 import FriendsSidebar from '@/components/friends/FriendsSidebar';
 import ProfileEditorModal from '@/components/profile/ProfileEditorModal';
 import { AnimatePresence } from 'framer-motion';
-import { auth } from '../firebase';
+import { auth, db } from '../firebase';
+import { collection, query, where, onSnapshot } from 'firebase/firestore';
 import { signOut, onAuthStateChanged } from 'firebase/auth';
 import { useToast } from "@/components/ui/use-toast";
+import { toast as sonnerToast } from 'sonner';
 import { registerFCMToken } from "@/hooks/useNotifications";
 import { useAuth } from '@/lib/AuthContext';
 
@@ -18,6 +20,7 @@ import { useAuth } from '@/lib/AuthContext';
 
 export default function Layout() {
   const location = useLocation();
+  const navigate = useNavigate();
   const [chatOpen, setChatOpen] = useState(false);
   const [friendsOpen, setFriendsOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
@@ -34,6 +37,45 @@ export default function Layout() {
     });
     return () => unsub();
   }, []);
+
+  // Global Listener for Listening Session Invite
+  useEffect(() => {
+    if (!localUser || !localUser.email) return;
+
+    const q = query(
+      collection(db, 'listening_sessions'),
+      where('participants', 'array-contains', localUser.email),
+      where('status', '==', 'inviting')
+    );
+
+    const activeToasts = new Set();
+
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      snapshot.docs.forEach(doc => {
+        const data = doc.data();
+        if (data.host_email !== localUser.email) {
+          // It's an incoming invite from the host
+          const inviteId = doc.id;
+          if (!activeToasts.has(inviteId)) {
+            activeToasts.add(inviteId);
+            sonnerToast.info(`🎧 Lời mời nghe chung!`, {
+              description: `${data.host_name} muốn rủ bạn cùng nghe bài "${data.track?.ten_bai}".`,
+              action: {
+                label: 'Tham gia',
+                onClick: () => {
+                  navigate('/entertainment');
+                }
+              },
+              duration: 12000,
+              onDismiss: () => activeToasts.delete(inviteId)
+            });
+          }
+        }
+      });
+    });
+
+    return () => unsubscribe();
+  }, [localUser, navigate]);
 
   useEffect(() => {
     // Chỉ hiển thị nếu trình duyệt hỗ trợ Notification và quyền hiện tại là default
