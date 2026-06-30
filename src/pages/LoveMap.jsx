@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { MapContainer, TileLayer, Marker, Polyline } from 'react-leaflet';
+import { MapContainer, TileLayer, Marker, Polyline, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { db, storage, auth } from '../firebase';
@@ -91,9 +91,20 @@ const formatDuration = (secs) => {
   return `${mins} phút ${remainingSecs > 0 ? `${remainingSecs}s` : ''}`;
 };
 
+// Sub-component to capture Leaflet map instance safely from context
+function MapInstanceCapture({ setMap }) {
+  const map = useMap();
+  useEffect(() => {
+    if (map) {
+      setMap(map);
+    }
+  }, [map, setMap]);
+  return null;
+}
+
 export default function LoveMap() {
   const currentUser = auth.currentUser;
-  const mapRef = useRef(null);
+  const [map, setMap] = useState(null);
   const [memories, setMemories] = useState([]);
   const [profiles, setProfiles] = useState({});
   const [selectedMemory, setSelectedMemory] = useState(null);
@@ -171,10 +182,19 @@ export default function LoveMap() {
     return () => unsub();
   }, []);
 
+  // Clean up watches on unmount
+  useEffect(() => {
+    return () => {
+      if (watchIdRef.current) navigator.geolocation.clearWatch(watchIdRef.current);
+      if (journeyWatchIdRef.current) navigator.geolocation.clearWatch(journeyWatchIdRef.current);
+    };
+  }, []);
+
   // Location sharing real-time synchronization
   useEffect(() => {
-    if (!currentUser) return;
-    const partnerEmail = Object.keys(profiles).find(email => email !== currentUser.email.toLowerCase());
+    if (!currentUser || !currentUser.email) return;
+    const myEmailLower = currentUser.email.toLowerCase();
+    const partnerEmail = Object.keys(profiles).find(email => email !== myEmailLower);
     
     if (!partnerEmail) return;
 
@@ -198,14 +218,16 @@ export default function LoveMap() {
 
     return () => {
       if (unsubLoc) unsubLoc();
-      if (watchIdRef.current) navigator.geolocation.clearWatch(watchIdRef.current);
-      if (journeyWatchIdRef.current) navigator.geolocation.clearWatch(journeyWatchIdRef.current);
     };
   }, [profiles, currentUser]);
 
   const focusOnLocation = (lat, lng, zoom = 15) => {
-    if (mapRef.current) {
-      mapRef.current.setView([lat, lng], zoom);
+    if (map) {
+      try {
+        map.setView([lat, lng], zoom);
+      } catch (e) {
+        console.error("setView failed:", e);
+      }
     }
   };
 
@@ -213,7 +235,7 @@ export default function LoveMap() {
     if (!position || !position.coords) return;
     const { latitude, longitude } = position.coords;
     setMyLocation({ lat: latitude, lng: longitude });
-    if (currentUser) {
+    if (currentUser && currentUser.email) {
       setDoc(doc(db, 'user_locations', currentUser.email.toLowerCase()), {
         email: currentUser.email,
         latitude,
@@ -233,7 +255,7 @@ export default function LoveMap() {
       }
       setIsSharingLocation(false);
       setMyLocation(null);
-      if (currentUser) {
+      if (currentUser && currentUser.email) {
         setDoc(doc(db, 'user_locations', currentUser.email.toLowerCase()), {
           status: 'inactive',
           updatedAt: serverTimestamp()
@@ -378,7 +400,7 @@ export default function LoveMap() {
 
   const handleSaveJourney = async (e) => {
     e.preventDefault();
-    if (!journeyTitle.trim() || journeyCoords.length < 2) return;
+    if (!journeyTitle.trim() || journeyCoords.length < 2 || !currentUser || !currentUser.email) return;
 
     setSavingJourney(true);
     try {
@@ -443,7 +465,7 @@ export default function LoveMap() {
 
       return () => clearInterval(interval);
     }
-  }, [isReliving, selectedJourney]);
+  }, [isReliving, selectedJourney, map]);
 
   // Build custom icon for memory pins
   const createMemoryIcon = (createdBy, emoji) => {
@@ -619,12 +641,14 @@ export default function LoveMap() {
       {/* Leaflet Map */}
       <div className="flex-1 w-full h-full relative z-0 rounded-3xl overflow-hidden shadow-inner border border-white/20">
         <MapContainer 
-          ref={mapRef}
           center={[16.047079, 108.206230]} 
           zoom={6} 
           doubleClickZoom={false}
           style={{ width: '100%', height: '100%' }}
         >
+          {/* Capture map instance */}
+          <MapInstanceCapture setMap={setMap} />
+
           {/* Pastel/Voyager CartoDB Map Tiles */}
           <TileLayer
             attribution='&copy; <a href="https://carto.com/">CartoDB</a>'
