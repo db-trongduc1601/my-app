@@ -6,19 +6,42 @@ import { RefreshCw, Trophy, AlertCircle } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { cn } from '@/lib/utils';
 
-// Romantic labels matching tile values
-const TILE_LABELS = {
-  2: { text: '🌸 Mới quen', bg: 'linear-gradient(135deg, #fff0f6 0%, #ffdeeb 100%)', textCol: '#c2255c' },
-  4: { text: '☕ Cafe đầu', bg: 'linear-gradient(135deg, #fff9db 0%, #ffe066 100%)', textCol: '#e67700' },
-  8: { text: '🤝 Nắm tay', bg: 'linear-gradient(135deg, #fff4e6 0%, #ffd8a8 100%)', textCol: '#d9480f' },
-  16: { text: '🍿 Xem phim', bg: 'linear-gradient(135deg, #ffe3e3 0%, #ffc9c9 100%)', textCol: '#e03131' },
-  32: { text: '🎁 Tặng quà', bg: 'linear-gradient(135deg, #f3f0ff 0%, #e5dbff 100%)', textCol: '#5f3dc4' },
-  64: { text: '✈️ Đi du lịch', bg: 'linear-gradient(135deg, #e3fafc 0%, #c5f6fa 100%)', textCol: '#0b7285' },
-  128: { text: '💕 Tỏ tình', bg: 'linear-gradient(135deg, #fff0f6 0%, #faa2c1 100%)', textCol: '#a61e4d' },
-  256: { text: '🏡 Ra mắt', bg: 'linear-gradient(135deg, #fff9db 0%, #ffd43b 100%)', textCol: '#f08c00' },
-  512: { text: '💍 Đính hôn', bg: 'linear-gradient(135deg, #e6fcf5 0%, #96f2d7 100%)', textCol: '#087f5b' },
-  1024: { text: '👰 Kết hôn', bg: 'linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%)', textCol: '#212529', glow: true },
-  2048: { text: '❤️ Trọn đời', bg: 'linear-gradient(135deg, #ff8787 0%, #fa5252 100%)', textCol: '#ffffff', glow: true, final: true }
+// Helper to get styled gradients & glows for number values dynamically
+const getTileStyle = (val) => {
+  if (val === 0) return { bg: 'rgba(255, 255, 255, 0.025)', textCol: 'transparent', fontSize: 'text-2xl' };
+  
+  // Style config based on value
+  switch (val) {
+    case 2:
+      return { bg: 'linear-gradient(135deg, #fff0f6 0%, #ffdeeb 100%)', textCol: '#c2255c', fontSize: 'text-2xl sm:text-3xl' };
+    case 4:
+      return { bg: 'linear-gradient(135deg, #fff9db 0%, #ffe066 100%)', textCol: '#e67700', fontSize: 'text-2xl sm:text-3xl' };
+    case 8:
+      return { bg: 'linear-gradient(135deg, #fff4e6 0%, #ffd8a8 100%)', textCol: '#d9480f', fontSize: 'text-2xl sm:text-3xl' };
+    case 16:
+      return { bg: 'linear-gradient(135deg, #ffe3e3 0%, #ffc9c9 100%)', textCol: '#e03131', fontSize: 'text-2xl sm:text-3xl' };
+    case 32:
+      return { bg: 'linear-gradient(135deg, #f3f0ff 0%, #e5dbff 100%)', textCol: '#5f3dc4', fontSize: 'text-2xl sm:text-3xl' };
+    case 64:
+      return { bg: 'linear-gradient(135deg, #e3fafc 0%, #c5f6fa 100%)', textCol: '#0b7285', fontSize: 'text-2xl sm:text-3xl' };
+    case 128:
+      return { bg: 'linear-gradient(135deg, #fff0f6 0%, #faa2c1 100%)', textCol: '#a61e4d', fontSize: 'text-xl sm:text-2xl' };
+    case 256:
+      return { bg: 'linear-gradient(135deg, #fff9db 0%, #ffd43b 100%)', textCol: '#f08c00', fontSize: 'text-xl sm:text-2xl' };
+    case 512:
+      return { bg: 'linear-gradient(135deg, #e6fcf5 0%, #96f2d7 100%)', textCol: '#087f5b', fontSize: 'text-xl sm:text-2xl' };
+    case 1024:
+      return { bg: 'linear-gradient(135deg, #f3f0ff 0%, #b197fc 100%)', textCol: '#3b0066', fontSize: 'text-lg sm:text-xl', glow: true };
+    case 2048:
+      return { bg: 'linear-gradient(135deg, #ff8787 0%, #fa5252 100%)', textCol: '#ffffff', fontSize: 'text-lg sm:text-xl', glow: true };
+    case 4096:
+      return { bg: 'linear-gradient(135deg, #da77f2 0%, #be4bdb 100%)', textCol: '#ffffff', fontSize: 'text-lg sm:text-xl', glow: true };
+    case 8192:
+      return { bg: 'linear-gradient(135deg, #748ffc 0%, #4c6ef5 100%)', textCol: '#ffffff', fontSize: 'text-lg sm:text-xl', glow: true };
+    default:
+      // Beyond 8192: Obsidian neon pink gradient
+      return { bg: 'linear-gradient(135deg, #25262b 0%, #e64980 100%)', textCol: '#ffffff', fontSize: 'text-base sm:text-lg', glow: true };
+  }
 };
 
 export default function Love2048({ currentHighScores }) {
@@ -29,8 +52,6 @@ export default function Love2048({ currentHighScores }) {
   const [score, setScore] = useState(0);
   const [highScore, setHighScore] = useState(0);
   const [gameOver, setGameOver] = useState(false);
-  const [victory, setVictory] = useState(false);
-  const [keepPlaying, setKeepPlaying] = useState(false);
 
   const touchStartRef = useRef({ x: 0, y: 0 });
 
@@ -69,8 +90,6 @@ export default function Love2048({ currentHighScores }) {
     setGrid(newGrid);
     setScore(0);
     setGameOver(false);
-    setVictory(false);
-    setKeepPlaying(false);
   }, [spawnTile]);
 
   useEffect(() => {
@@ -100,24 +119,21 @@ export default function Love2048({ currentHighScores }) {
 
   // Slide & Merge logic helpers
   const slideRowLeft = (row) => {
-    // Filter non-zeros
     let nonZeros = row.filter(val => val !== 0);
     let newRow = [];
     let addedScore = 0;
 
     for (let i = 0; i < nonZeros.length; i++) {
       if (i < nonZeros.length - 1 && nonZeros[i] === nonZeros[i + 1]) {
-        // Merge
         const mergedVal = nonZeros[i] * 2;
         newRow.push(mergedVal);
         addedScore += mergedVal;
-        i++; // skip next cell since it was merged
+        i++;
       } else {
         newRow.push(nonZeros[i]);
       }
     }
 
-    // Pad with zeros to size 4
     while (newRow.length < 4) {
       newRow.push(0);
     }
@@ -126,19 +142,16 @@ export default function Love2048({ currentHighScores }) {
   };
 
   const checkGameOverStatus = (currentGrid) => {
-    // Check empty cells
     for (let r = 0; r < 4; r++) {
       for (let c = 0; c < 4; c++) {
         if (currentGrid[r][c] === 0) return false;
       }
     }
-    // Check horizontal neighbors
     for (let r = 0; r < 4; r++) {
       for (let c = 0; c < 3; c++) {
         if (currentGrid[r][c] === currentGrid[r][c + 1]) return false;
       }
     }
-    // Check vertical neighbors
     for (let r = 0; r < 3; r++) {
       for (let c = 0; c < 4; c++) {
         if (currentGrid[r][c] === currentGrid[r + 1][c]) return false;
@@ -148,7 +161,7 @@ export default function Love2048({ currentHighScores }) {
   };
 
   const move = useCallback((direction) => {
-    if (gameOver || (victory && !keepPlaying)) return;
+    if (gameOver) return;
 
     let hasChanged = false;
     let addedScore = 0;
@@ -165,7 +178,6 @@ export default function Love2048({ currentHighScores }) {
       }
     } else if (direction === 'RIGHT') {
       for (let r = 0; r < 4; r++) {
-        // Reverse row, slide left, then reverse back
         const reversed = [...grid[r]].reverse();
         const { newRow, addedScore: rowScore } = slideRowLeft(reversed);
         const finalRow = newRow.reverse();
@@ -192,7 +204,6 @@ export default function Love2048({ currentHighScores }) {
         const column = [grid[3][c], grid[2][c], grid[1][c], grid[0][c]];
         const { newRow, addedScore: colScore } = slideRowLeft(column);
         addedScore += colScore;
-        // Reverse back
         const finalCol = newRow.reverse();
         for (let r = 0; r < 4; r++) {
           nextGrid[r][c] = finalCol[r];
@@ -209,28 +220,8 @@ export default function Love2048({ currentHighScores }) {
       const newScore = score + addedScore;
       setScore(newScore);
 
-      // Check if broke record
       if (newScore > highScore) {
         setHighScore(newScore);
-      }
-
-      // Check victory 2048 tile
-      let has2048 = false;
-      for (let r = 0; r < 4; r++) {
-        for (let c = 0; c < 4; c++) {
-          if (spawnedGrid[r][c] === 2048) {
-            has2048 = true;
-            break;
-          }
-        }
-      }
-      if (has2048 && !victory) {
-        setVictory(true);
-        confetti({
-          particleCount: 150,
-          spread: 80,
-          origin: { y: 0.6 }
-        });
       }
 
       // Check Game Over
@@ -241,7 +232,7 @@ export default function Love2048({ currentHighScores }) {
         }
       }
     }
-  }, [grid, score, gameOver, victory, keepPlaying, highScore, myEmailLower, currentHighScores, spawnTile]);
+  }, [grid, score, gameOver, highScore, myEmailLower, currentHighScores, spawnTile]);
 
   // Touch Swipe Gesture Handlers
   const handleTouchStart = (e) => {
@@ -274,7 +265,7 @@ export default function Love2048({ currentHighScores }) {
   // Keyboard events listener
   const handleKeyDown = useCallback((e) => {
     if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
-      e.preventDefault(); // prevent scroll
+      e.preventDefault();
       if (e.key === 'ArrowUp') move('UP');
       if (e.key === 'ArrowDown') move('DOWN');
       if (e.key === 'ArrowLeft') move('LEFT');
@@ -288,17 +279,17 @@ export default function Love2048({ currentHighScores }) {
   }, [handleKeyDown]);
 
   return (
-    <div className="flex flex-col items-center w-full max-w-md mx-auto space-y-4 select-none relative font-display">
+    <div className="flex flex-col items-center w-full max-w-sm mx-auto space-y-4 select-none relative font-display">
       {/* Game Header: score details */}
-      <div className="w-full flex justify-between items-center liquid-glass px-4 py-2.5 rounded-2xl border-none">
+      <div className="w-full flex justify-between items-center liquid-glass px-4 py-2.5 rounded-2xl border-none shadow-md">
         <div className="flex flex-col items-start">
           <span className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider">Điểm số</span>
-          <span className="text-xl font-black text-primary">{score}</span>
+          <span className="text-xl font-black text-primary text-glow">{score}</span>
         </div>
 
         <div className="flex flex-col items-end">
           <span className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider flex items-center gap-1">
-            <Trophy size={10} className="text-yellow-400" /> Kỷ lục của bạn
+            <Trophy size={10} className="text-yellow-400" /> Kỷ lục
           </span>
           <span className="text-sm font-bold text-yellow-400">{highScore}</span>
         </div>
@@ -308,43 +299,38 @@ export default function Love2048({ currentHighScores }) {
       <div
         onTouchStart={handleTouchStart}
         onTouchEnd={handleTouchEnd}
-        className="w-full aspect-square bg-[#1a141b]/90 border border-white/10 rounded-3xl p-3 grid grid-cols-4 grid-rows-4 gap-3 touch-action-none select-none relative overflow-hidden"
+        className="w-full aspect-square bg-[#1c1219]/95 border border-white/10 rounded-3xl p-3 grid grid-cols-4 grid-rows-4 gap-3 touch-action-none select-none relative overflow-hidden shadow-xl"
         style={{ touchAction: 'none' }}
       >
+        {/* Subtle grid background lighting */}
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,rgba(6,182,212,0.06),transparent_60%)] pointer-events-none" />
+
         {grid.map((row, rIdx) =>
           row.map((cell, cIdx) => {
-            const tileStyle = TILE_LABELS[cell];
+            const tileStyle = getTileStyle(cell);
 
             return (
               <div
                 key={`${rIdx}-${cIdx}`}
                 className={cn(
-                  "rounded-2xl flex flex-col items-center justify-center p-1.5 transition-all duration-200 text-center font-display select-none relative shadow-inner overflow-hidden",
-                  tileStyle?.glow && "animate-glow-pulse"
+                  "rounded-2xl flex items-center justify-center p-1 transition-all duration-200 text-center font-display font-black select-none relative overflow-hidden",
+                  tileStyle.glow && "animate-glow-pulse shadow-lg"
                 )}
                 style={{
-                  background: tileStyle ? tileStyle.bg : 'rgba(255, 255, 255, 0.03)',
-                  border: tileStyle ? 'none' : '1px solid rgba(255, 255, 255, 0.02)',
+                  background: tileStyle.bg,
+                  border: cell > 0 ? 'none' : '1px solid rgba(255, 255, 255, 0.015)',
+                  boxShadow: tileStyle.glow ? `0 0 12px ${tileStyle.textCol}55` : 'none'
                 }}
               >
-                {cell > 0 && tileStyle ? (
+                {cell > 0 ? (
                   <>
-                    {/* Visual 3D inner glare */}
-                    <div className="absolute inset-px rounded-xl bg-white/10 border-t border-l border-white/20 pointer-events-none" />
-                    
-                    {/* Icon/Emoji upper section */}
-                    <span 
-                      className="text-base sm:text-lg select-none"
-                      style={{ filter: 'drop-shadow(0 1px 1px rgba(0,0,0,0.15))' }}
-                    >
-                      {tileStyle.text.split(' ')[0]}
-                    </span>
-                    {/* Caption label text */}
+                    <div className="absolute inset-px rounded-xl bg-white/15 border-t border-l border-white/20 pointer-events-none" />
+                    <div className="absolute inset-0 bg-gradient-to-br from-white/10 to-transparent pointer-events-none" />
                     <span
-                      className="text-[9px] font-bold mt-1 select-none tracking-tight leading-none"
-                      style={{ color: tileStyle.textCol, textShadow: '0 1px 1px rgba(255,255,255,0.4)' }}
+                      className={cn("select-none drop-shadow-md tracking-tight", tileStyle.fontSize)}
+                      style={{ color: tileStyle.textCol }}
                     >
-                      {tileStyle.text.split(' ').slice(1).join(' ')}
+                      {cell}
                     </span>
                   </>
                 ) : null}
@@ -356,45 +342,20 @@ export default function Love2048({ currentHighScores }) {
 
       <div className="w-full text-center">
         <p className="text-[10px] text-muted-foreground font-semibold">
-          💡 **Hướng dẫn**: Vuốt màn hình hoặc dùng phím mũi tên để gộp ô tình yêu.
+          💡 **Hướng dẫn**: Vuốt màn hình hoặc dùng phím mũi tên để gộp các ô số giống nhau. Điểm số tăng vô hạn!
         </p>
       </div>
 
-      {/* Victory Overlay */}
-      {victory && !keepPlaying && (
-        <div className="absolute inset-0 bg-[#181116]/80 backdrop-blur-md rounded-3xl z-[1000] flex flex-col items-center justify-center p-6 space-y-4 border border-white/10 animate-fade-in">
-          <span className="text-4xl">❤️</span>
-          <h2 className="text-xl font-bold text-glow text-pink-400">Trọn Đời Bên Nhau! 👰💍</h2>
-          <p className="text-xs text-muted-foreground text-center max-w-[220px] font-body leading-relaxed">
-            Hai bạn đã hoàn thành mảnh ghép 2048 để đồng hành cùng nhau trọn đời!
-          </p>
-          <div className="flex gap-2">
-            <button
-              onClick={() => setKeepPlaying(true)}
-              className="px-4 py-2 rounded-xl bg-white/10 text-foreground border border-white/10 text-xs font-bold hover:bg-white/20 transition active:scale-95 cursor-pointer"
-            >
-              Chơi tiếp
-            </button>
-            <button
-              onClick={startNewGame}
-              className="px-4 py-2 rounded-xl gradient-primary text-white text-xs font-bold shadow hover:opacity-90 transition active:scale-95 cursor-pointer"
-            >
-              Chơi lại
-            </button>
-          </div>
-        </div>
-      )}
-
       {/* Game Over Overlay */}
       {gameOver && (
-        <div className="absolute inset-0 bg-[#181116]/80 backdrop-blur-md rounded-3xl z-[1000] flex flex-col items-center justify-center p-6 space-y-4 border border-white/10 animate-fade-in">
+        <div className="absolute inset-0 bg-[#181116]/80 backdrop-blur-md rounded-3xl z-[1000] flex flex-col items-center justify-center p-6 space-y-4 border border-white/10 animate-fade-in font-display">
           <AlertCircle size={44} className="text-red-500 animate-bounce" />
           <h2 className="text-xl font-bold text-glow">Hết nước đi rồi! 🥺</h2>
           <div className="text-center font-body space-y-1">
             <p className="text-xs text-muted-foreground">Điểm số đạt được:</p>
-            <p className="text-2xl font-black text-primary">{score}đ</p>
+            <p className="text-2xl font-black text-primary text-glow">{score}đ</p>
             {score >= highScore && score > 0 && (
-              <p className="text-[10px] text-yellow-400 font-bold uppercase tracking-wider mt-1">🎉 Kỷ lục mới của riêng bạn!</p>
+              <p className="text-[10px] text-yellow-400 font-bold uppercase tracking-wider mt-1">🎉 Kỷ lục mới!</p>
             )}
           </div>
           <button

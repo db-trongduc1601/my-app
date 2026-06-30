@@ -6,18 +6,27 @@ import { RefreshCw, Trophy, Zap, AlertCircle } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { cn } from '@/lib/utils';
 
-// Color themes matching liquid glass aesthetics
-const BLOCK_COLORS = [
-  '#FF6B9D', // Rose pink
-  '#FF8FAB', // Soft pink
-  '#06b6d4', // Cyan
-  '#10b981', // Emerald
-  '#a855f7', // Purple
-  '#f97316', // Orange
-  '#3b82f6'  // Blue
+// Vibrant glass-brick gradients
+const BLOCK_GRADIENTS = [
+  'linear-gradient(135deg, #ff758f 0%, #ff7fa4 100%)', // Pink Glass
+  'linear-gradient(135deg, #06b6d4 0%, #22d3ee 100%)', // Cyan Glass
+  'linear-gradient(135deg, #10b981 0%, #34d399 100%)', // Emerald Glass
+  'linear-gradient(135deg, #a855f7 0%, #c084fc 100%)', // Purple Glass
+  'linear-gradient(135deg, #f97316 0%, #fb923c 100%)', // Orange Glass
+  'linear-gradient(135deg, #3b82f6 0%, #60a5fa 100%)', // Blue Glass
+  'linear-gradient(135deg, #ec4899 0%, #f472b6 100%)'  // Rose Glass
 ];
 
-// Definition of block shapes (row, col offsets relative to origin)
+const BLOCK_GLOWS = [
+  'rgba(255, 117, 143, 0.4)',
+  'rgba(6, 182, 212, 0.4)',
+  'rgba(16, 189, 129, 0.4)',
+  'rgba(168, 85, 247, 0.4)',
+  'rgba(249, 115, 22, 0.4)',
+  'rgba(59, 130, 246, 0.4)',
+  'rgba(236, 72, 153, 0.4)'
+];
+
 const SHAPES = [
   { name: '1x1', coords: [[0, 0]] },
   { name: '1x2', coords: [[0, 0], [0, 1]] },
@@ -47,13 +56,12 @@ export default function BlockBlast({ currentHighScores }) {
 
   // Drag states
   const [draggingIndex, setDraggingIndex] = useState(null); // index (0,1,2) of upcoming block
-  const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 }); // offset from touch start to block top-left
+  const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 }); // offset from touch point to top-left of block
   const [dragPosition, setDragPosition] = useState({ x: 0, y: 0 }); // current screen position
   const [hoveredCell, setHoveredCell] = useState(null); // { row, col } top-left landing cell
 
   const boardRef = useRef(null);
   const touchStartRef = useRef({ x: 0, y: 0 });
-  const blockRefs = useRef([]);
 
   // Load high score
   useEffect(() => {
@@ -78,23 +86,25 @@ export default function BlockBlast({ currentHighScores }) {
   // Generate 3 random blocks
   const generateNewBlocks = () => {
     return Array(3).fill(null).map(() => {
-      const shape = SHAPES[Math.floor(Math.random() * SHAPES.length)];
-      const color = BLOCK_COLORS[Math.floor(Math.random() * BLOCK_COLORS.length)];
-      return { ...shape, color, id: Math.random() };
+      const shapeIndex = Math.floor(Math.random() * SHAPES.length);
+      const shape = SHAPES[shapeIndex];
+      const colorIndex = Math.floor(Math.random() * BLOCK_GRADIENTS.length);
+      return { 
+        ...shape, 
+        gradient: BLOCK_GRADIENTS[colorIndex], 
+        glow: BLOCK_GLOWS[colorIndex],
+        id: Math.random() 
+      };
     });
   };
 
-  // Check if a block can be placed at a specific cell
   const canPlaceBlock = (boardState, blockCoords, startRow, startCol) => {
     for (const [rOffset, cOffset] of blockCoords) {
       const targetRow = startRow + rOffset;
       const targetCol = startCol + cOffset;
-      
-      // Check boundaries
       if (targetRow < 0 || targetRow >= 8 || targetCol < 0 || targetCol >= 8) {
         return false;
       }
-      // Check occupancy
       if (boardState[targetRow][targetCol] !== 0) {
         return false;
       }
@@ -102,7 +112,6 @@ export default function BlockBlast({ currentHighScores }) {
     return true;
   };
 
-  // Check if there is ANY valid move left for a specific block on the current board
   const hasAnyValidMove = (boardState, blockCoords) => {
     for (let r = 0; r < 8; r++) {
       for (let c = 0; c < 8; c++) {
@@ -114,13 +123,9 @@ export default function BlockBlast({ currentHighScores }) {
     return false;
   };
 
-  // Check Game Over status
   const checkGameOver = (currentBoard, currentBlocks) => {
-    // If no blocks remain, it's not game over yet
     const activeBlocks = currentBlocks.filter(b => b !== null);
     if (activeBlocks.length === 0) return false;
-
-    // Check if at least one active block has a valid move
     for (const block of activeBlocks) {
       if (hasAnyValidMove(currentBoard, block.coords)) {
         return false;
@@ -129,7 +134,6 @@ export default function BlockBlast({ currentHighScores }) {
     return true;
   };
 
-  // Update High Score on Firestore
   const updateHighScore = async (newScore) => {
     if (!myEmailLower) return;
     try {
@@ -150,22 +154,27 @@ export default function BlockBlast({ currentHighScores }) {
     }
   };
 
-  // Drag and Drop mouse & touch listeners
   const handleDragStart = (e, index) => {
     if (gameOver) return;
     const isTouch = e.type.startsWith('touch');
     const clientX = isTouch ? e.touches[0].clientX : e.clientX;
     const clientY = isTouch ? e.touches[0].clientY : e.clientY;
 
-    const blockEl = blockRefs.current[index];
-    if (!blockEl) return;
+    const block = upcomingBlocks[index];
+    if (!block) return;
 
-    const rect = blockEl.getBoundingClientRect();
-    
-    // Save starting offsets relative to the top-left of the block
+    // Calculate dimensions
+    const cols = Math.max(...block.coords.map(c => c[1])) + 1;
+    const rows = Math.max(...block.coords.map(c => c[0])) + 1;
+
+    // Snapping logic: drag block is rendered with 30px cells
+    const dragBlockWidth = cols * 30;
+    const dragBlockHeight = rows * 30;
+
+    // Offset the block slightly above the user's finger/mouse pointer to keep it visible!
     setDragOffset({
-      x: clientX - rect.left,
-      y: clientY - rect.top
+      x: dragBlockWidth / 2,
+      y: dragBlockHeight + 35 // Offset 35px above touch point
     });
     setDragPosition({ x: clientX, y: clientY });
     setDraggingIndex(index);
@@ -182,7 +191,6 @@ export default function BlockBlast({ currentHighScores }) {
 
     setDragPosition({ x: clientX, y: clientY });
 
-    // Calculate hover cell relative to the grid bounding rect
     const boardEl = boardRef.current;
     if (!boardEl) return;
 
@@ -190,20 +198,25 @@ export default function BlockBlast({ currentHighScores }) {
     const cellWidth = boardRect.width / 8;
     const cellHeight = boardRect.height / 8;
 
-    // Calculate the coordinates of the block origin
-    // Let's project the center of the block first cell on the grid
-    const blockX = clientX - dragOffset.x;
-    const blockY = clientY - dragOffset.y;
-
-    // Find closest cell coordinate on board
-    const relativeX = blockX - boardRect.left + (cellWidth / 2);
-    const relativeY = blockY - boardRect.top + (cellHeight / 2);
-
-    const col = Math.floor(relativeX / cellWidth);
-    const row = Math.floor(relativeY / cellHeight);
-
     const block = upcomingBlocks[draggingIndex];
-    if (block && row >= 0 && row < 8 && col >= 0 && col < 8) {
+    if (!block) return;
+
+    const cols = Math.max(...block.coords.map(c => c[1])) + 1;
+    const rows = Math.max(...block.coords.map(c => c[0])) + 1;
+    const dragBlockWidth = cols * 30;
+    const dragBlockHeight = rows * 30;
+
+    const left = clientX - dragBlockWidth / 2;
+    const top = clientY - dragBlockHeight - 35;
+
+    // Find closest cell coordinate on the board
+    const relativeX = left - boardRect.left;
+    const relativeY = top - boardRect.top;
+
+    const col = Math.round(relativeX / cellWidth);
+    const row = Math.round(relativeY / cellHeight);
+
+    if (row >= 0 && row < 8 && col >= 0 && col < 8) {
       if (canPlaceBlock(board, block.coords, row, col)) {
         setHoveredCell({ row, col });
       } else {
@@ -225,7 +238,7 @@ export default function BlockBlast({ currentHighScores }) {
       // Update Board
       const newBoard = board.map(r => [...r]);
       block.coords.forEach(([rOffset, cOffset]) => {
-        newBoard[row + rOffset][col + cOffset] = block.color;
+        newBoard[row + rOffset][col + cOffset] = block.gradient;
       });
 
       // Clear full rows & columns
@@ -281,9 +294,10 @@ export default function BlockBlast({ currentHighScores }) {
         clearScore = cellsCleared * 10 * newCombo;
         setCombo(newCombo);
         
-        // Success clearing sound/vibe (Toast micro-effect)
         if (newCombo > 1) {
           toast.success(`💥 Combo x${newCombo}! +${clearScore}đ`);
+        } else {
+          toast.success(`💥 Clear! +${clearScore}đ`);
         }
       } else {
         setCombo(0);
@@ -293,7 +307,6 @@ export default function BlockBlast({ currentHighScores }) {
       const newScore = score + additionalScore;
       setScore(newScore);
 
-      // Check for highscore record breaks
       if (newScore > highScore) {
         setHighScore(newScore);
       }
@@ -302,7 +315,6 @@ export default function BlockBlast({ currentHighScores }) {
       const nextBlocks = [...upcomingBlocks];
       nextBlocks[draggingIndex] = null;
 
-      // If all 3 blocks used, generate new ones
       const hasActive = nextBlocks.some(b => b !== null);
       let finalBlocks = nextBlocks;
       if (!hasActive) {
@@ -312,7 +324,6 @@ export default function BlockBlast({ currentHighScores }) {
       setBoard(newBoard);
       setUpcomingBlocks(finalBlocks);
 
-      // Check if Game Over
       if (checkGameOver(newBoard, finalBlocks)) {
         setGameOver(true);
         if (newScore > (currentHighScores[myEmailLower] || 0)) {
@@ -342,23 +353,23 @@ export default function BlockBlast({ currentHighScores }) {
   }, [draggingIndex, hoveredCell]);
 
   return (
-    <div className="flex flex-col items-center w-full max-w-md mx-auto space-y-4 select-none relative font-display">
+    <div className="flex flex-col items-center w-full max-w-sm mx-auto space-y-4 select-none relative font-display">
       {/* Game Header: score details */}
-      <div className="w-full flex justify-between items-center liquid-glass px-4 py-2.5 rounded-2xl border-none">
+      <div className="w-full flex justify-between items-center liquid-glass px-4 py-2.5 rounded-2xl border-none shadow-md">
         <div className="flex flex-col items-start">
           <span className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider">Điểm số</span>
-          <span className="text-xl font-black text-primary">{score}</span>
+          <span className="text-xl font-black text-primary text-glow">{score}</span>
         </div>
         
         {combo > 0 && (
-          <span className="text-[10px] bg-red-500/20 text-red-400 border border-red-500/30 px-2 py-0.5 rounded-full font-bold animate-pulse flex items-center gap-1">
+          <span className="text-[10px] bg-pink-500/20 text-pink-400 border border-pink-500/30 px-2 py-0.5 rounded-full font-bold animate-pulse flex items-center gap-1">
             <Zap size={8} /> Combo x{combo}
           </span>
         )}
 
         <div className="flex flex-col items-end">
           <span className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider flex items-center gap-1">
-            <Trophy size={10} className="text-yellow-400" /> Kỷ lục của bạn
+            <Trophy size={10} className="text-yellow-400" /> Kỷ lục
           </span>
           <span className="text-sm font-bold text-yellow-400">{highScore}</span>
         </div>
@@ -367,12 +378,14 @@ export default function BlockBlast({ currentHighScores }) {
       {/* 8x8 Grid Board */}
       <div 
         ref={boardRef}
-        className="w-full aspect-square bg-[#1a141b]/90 border border-white/10 rounded-2xl p-1.5 grid grid-cols-8 grid-rows-8 gap-1.5 touch-action-none"
+        className="w-full aspect-square bg-[#1c1219]/95 border border-white/10 rounded-3xl p-3 grid grid-cols-8 grid-rows-8 gap-1.5 touch-action-none shadow-xl relative overflow-hidden"
         style={{ touchAction: 'none' }}
       >
+        {/* Subtle grid background lighting */}
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,rgba(244,114,182,0.06),transparent_60%)] pointer-events-none" />
+
         {board.map((row, rIdx) => 
           row.map((cell, cIdx) => {
-            // Check if current cell is highlighted as hovered landing
             let isHovered = false;
             if (hoveredCell && draggingIndex !== null) {
               const block = upcomingBlocks[draggingIndex];
@@ -386,20 +399,23 @@ export default function BlockBlast({ currentHighScores }) {
             return (
               <div
                 key={`${rIdx}-${cIdx}`}
-                className="rounded-[4px] relative transition-colors duration-150"
+                className="rounded-[6px] relative transition-colors duration-200 overflow-hidden"
                 style={{
-                  backgroundColor: cell !== 0 
+                  background: cell !== 0 
                     ? cell 
                     : isHovered 
-                      ? `${upcomingBlocks[draggingIndex]?.color}44` 
-                      : 'rgba(255,255,255,0.03)',
+                      ? upcomingBlocks[draggingIndex]?.glow
+                      : 'rgba(255,255,255,0.02)',
                   border: isHovered 
-                    ? `1px dashed ${upcomingBlocks[draggingIndex]?.color}` 
-                    : '1px solid rgba(255,255,255,0.02)'
+                    ? `1.5px dashed ${upcomingBlocks[draggingIndex]?.color || '#ff758f'}` 
+                    : '1px solid rgba(255,255,255,0.015)'
                 }}
               >
                 {cell !== 0 && (
-                  <div className="absolute inset-px rounded-[2px] bg-white/10 border-t border-l border-white/20 pointer-events-none" />
+                  <>
+                    <div className="absolute inset-px rounded-[4px] bg-white/15 border-t border-l border-white/20 pointer-events-none" />
+                    <div className="absolute inset-0 bg-gradient-to-br from-white/10 to-transparent pointer-events-none" />
+                  </>
                 )}
               </div>
             );
@@ -407,17 +423,15 @@ export default function BlockBlast({ currentHighScores }) {
         )}
       </div>
 
-      {/* Upcoming Blocks Selector */}
-      <div className="w-full grid grid-cols-3 gap-2 py-4">
+      {/* Upcoming Blocks Panel (floating shelf) */}
+      <div className="w-full grid grid-cols-3 gap-3 bg-white/5 border border-white/10 rounded-3xl p-3 shadow-inner">
         {upcomingBlocks.map((block, index) => {
           if (!block) return <div key={index} className="aspect-square bg-transparent" />;
 
-          // Calculate dimensions to render
           const rows = Math.max(...block.coords.map(c => c[0])) + 1;
           const cols = Math.max(...block.coords.map(c => c[1])) + 1;
 
-          // Check if this block can be placed on the current board
-          const activeClass = hasAnyValidMove(board, block.coords) ? "" : "opacity-30 pointer-events-none grayscale";
+          const activeClass = hasAnyValidMove(board, block.coords) ? "" : "opacity-20 pointer-events-none grayscale";
 
           return (
             <div
@@ -426,9 +440,9 @@ export default function BlockBlast({ currentHighScores }) {
               onMouseDown={(e) => handleDragStart(e, index)}
               onTouchStart={(e) => handleDragStart(e, index)}
               className={cn(
-                "aspect-square liquid-glass-sm rounded-2xl p-4 flex items-center justify-center cursor-grab active:cursor-grabbing select-none relative touch-action-none",
+                "aspect-square rounded-2xl flex items-center justify-center cursor-grab active:cursor-grabbing select-none relative touch-action-none bg-white/5 border border-white/10 hover:bg-white/10 transition-colors duration-200 active:scale-95",
                 activeClass,
-                draggingIndex === index && "opacity-0" // Hide original when dragging
+                draggingIndex === index && "opacity-0"
               )}
               style={{ touchAction: 'none' }}
             >
@@ -438,8 +452,8 @@ export default function BlockBlast({ currentHighScores }) {
                 style={{
                   gridTemplateRows: `repeat(${rows}, minmax(0, 1fr))`,
                   gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`,
-                  width: `${cols * 14}px`,
-                  height: `${rows * 14}px`
+                  width: `${cols * 15}px`,
+                  height: `${rows * 15}px`
                 }}
               >
                 {Array(rows).fill(null).map((_, r) => 
@@ -448,12 +462,15 @@ export default function BlockBlast({ currentHighScores }) {
                     return (
                       <div
                         key={`${r}-${c}`}
-                        className="rounded-sm"
+                        className="rounded-[3px] relative overflow-hidden"
                         style={{
-                          backgroundColor: hasCell ? block.color : 'transparent',
-                          boxShadow: hasCell ? 'inset 0 1px 2px rgba(255,255,255,0.2)' : 'none'
+                          background: hasCell ? block.gradient : 'transparent',
                         }}
-                      />
+                      >
+                        {hasCell && (
+                          <div className="absolute inset-0 bg-white/15 border-t border-l border-white/20 pointer-events-none" />
+                        )}
+                      </div>
                     );
                   })
                 )}
@@ -469,14 +486,15 @@ export default function BlockBlast({ currentHighScores }) {
         const rows = Math.max(...block.coords.map(c => c[0])) + 1;
         const cols = Math.max(...block.coords.map(c => c[1])) + 1;
 
+        // Render cell with 30px
         return (
           <div
             className="fixed pointer-events-none z-[99999] will-change-transform"
             style={{
               left: `${dragPosition.x - dragOffset.x}px`,
               top: `${dragPosition.y - dragOffset.y}px`,
-              width: `${cols * 32}px`,
-              height: `${rows * 32}px`
+              width: `${cols * 30}px`,
+              height: `${rows * 30}px`
             }}
           >
             <div 
@@ -494,12 +512,16 @@ export default function BlockBlast({ currentHighScores }) {
                   return (
                     <div
                       key={`${r}-${c}`}
-                      className="rounded-md border border-white/10 shadow-lg"
+                      className="rounded-[6px] relative shadow-lg overflow-hidden"
                       style={{
-                        backgroundColor: hasCell ? block.color : 'transparent',
-                        boxShadow: hasCell ? 'inset 0 2px 4px rgba(255,255,255,0.3)' : 'none'
+                        background: hasCell ? block.gradient : 'transparent',
+                        border: hasCell ? '1px solid rgba(255,255,255,0.2)' : 'none'
                       }}
-                    />
+                    >
+                      {hasCell && (
+                        <div className="absolute inset-0 bg-white/25 border-t border-l border-white/40 pointer-events-none" />
+                      )}
+                    </div>
                   );
                 })
               )}
@@ -508,16 +530,16 @@ export default function BlockBlast({ currentHighScores }) {
         );
       })()}
 
-      {/* Game Over Dialog Card Overlay */}
+      {/* Game Over Dialog */}
       {gameOver && (
-        <div className="absolute inset-0 bg-[#181116]/80 backdrop-blur-md rounded-3xl z-[1000] flex flex-col items-center justify-center p-6 space-y-4 border border-white/10 animate-fade-in">
+        <div className="absolute inset-0 bg-[#181116]/80 backdrop-blur-md rounded-3xl z-[1000] flex flex-col items-center justify-center p-6 space-y-4 border border-white/10 animate-fade-in font-display">
           <AlertCircle size={44} className="text-red-500 animate-bounce" />
           <h2 className="text-xl font-bold text-glow">Hết nước đi rồi! 🥺</h2>
           <div className="text-center font-body space-y-1">
             <p className="text-xs text-muted-foreground">Điểm số đạt được:</p>
-            <p className="text-2xl font-black text-primary">{score}đ</p>
+            <p className="text-2xl font-black text-primary text-glow">{score}đ</p>
             {score >= highScore && score > 0 && (
-              <p className="text-[10px] text-yellow-400 font-bold uppercase tracking-wider mt-1">🎉 Kỷ lục mới của riêng bạn!</p>
+              <p className="text-[10px] text-yellow-400 font-bold uppercase tracking-wider mt-1">🎉 Kỷ lục mới!</p>
             )}
           </div>
           <button
