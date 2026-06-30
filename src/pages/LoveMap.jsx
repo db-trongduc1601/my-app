@@ -64,12 +64,20 @@ function getDistance(lat1, lon1, lat2, lon2) {
   return R * c; // in metres
 }
 
-// Distance helper
+// Distance helper (defensive check)
 const calculatePathDistance = (coords) => {
-  if (!coords || coords.length < 2) return '0.00';
+  if (!coords || !Array.isArray(coords) || coords.length < 2) return '0.00';
   let totalMeters = 0;
-  for (let i = 1; i < coords.length; i++) {
-    totalMeters += getDistance(coords[i - 1].lat, coords[i - 1].lng, coords[i].lat, coords[i].lng);
+  try {
+    for (let i = 1; i < coords.length; i++) {
+      const p1 = coords[i - 1];
+      const p2 = coords[i];
+      if (p1 && p2 && typeof p1.lat === 'number' && typeof p1.lng === 'number' && typeof p2.lat === 'number' && typeof p2.lng === 'number') {
+        totalMeters += getDistance(p1.lat, p1.lng, p2.lat, p2.lng);
+      }
+    }
+  } catch (e) {
+    console.error("Error calculating path distance:", e);
   }
   return (totalMeters / 1000).toFixed(2);
 };
@@ -202,6 +210,7 @@ export default function LoveMap() {
   };
 
   const handleLocUpdate = (position) => {
+    if (!position || !position.coords) return;
     const { latitude, longitude } = position.coords;
     setMyLocation({ lat: latitude, lng: longitude });
     if (currentUser) {
@@ -243,7 +252,9 @@ export default function LoveMap() {
       navigator.geolocation.getCurrentPosition(
         (position) => {
           handleLocUpdate(position);
-          focusOnLocation(position.coords.latitude, position.coords.longitude, 12);
+          if (position && position.coords) {
+            focusOnLocation(position.coords.latitude, position.coords.longitude, 12);
+          }
         }, 
         (err) => console.error(err), 
         { enableHighAccuracy: true }
@@ -281,6 +292,7 @@ export default function LoveMap() {
     toast.success("Đang xác định vị trí hiện tại...");
     navigator.geolocation.getCurrentPosition(
       (position) => {
+        if (!position || !position.coords) return;
         const { latitude, longitude } = position.coords;
         setClickCoords({ lat: latitude, lng: longitude });
         setSelectedEmoji('💖');
@@ -312,6 +324,7 @@ export default function LoveMap() {
 
     navigator.geolocation.getCurrentPosition(
       (position) => {
+        if (!position || !position.coords) return;
         const pt = { lat: position.coords.latitude, lng: position.coords.longitude };
         setJourneyCoords([pt]);
         focusOnLocation(pt.lat, pt.lng, 15);
@@ -322,6 +335,7 @@ export default function LoveMap() {
 
     journeyWatchIdRef.current = navigator.geolocation.watchPosition(
       (position) => {
+        if (!position || !position.coords) return;
         const { latitude, longitude } = position.coords;
         setJourneyCoords(prev => {
           if (prev.length > 0) {
@@ -351,7 +365,9 @@ export default function LoveMap() {
     }
 
     // Calculate duration in seconds
-    const elapsedSecs = Math.round((Date.now() - journeyStartTimeRef.current) / 1000);
+    const elapsedSecs = journeyStartTimeRef.current 
+      ? Math.round((Date.now() - journeyStartTimeRef.current) / 1000)
+      : 0;
     setJourneyDuration(elapsedSecs);
 
     setJourneyTitle('');
@@ -400,10 +416,14 @@ export default function LoveMap() {
 
   // ── Journey Relive Animation ticker ──────────────────────────────────────
   useEffect(() => {
-    if (isReliving && selectedJourney && selectedJourney.coords && selectedJourney.coords.length > 0) {
+    if (isReliving && selectedJourney && Array.isArray(selectedJourney.coords) && selectedJourney.coords.length > 0) {
       const coords = selectedJourney.coords;
       setReliveIndex(0);
-      focusOnLocation(coords[0].lat, coords[0].lng, 15);
+      
+      const startPt = coords[0];
+      if (startPt && typeof startPt.lat === 'number' && typeof startPt.lng === 'number') {
+        focusOnLocation(startPt.lat, startPt.lng, 15);
+      }
 
       let cur = 0;
       const interval = setInterval(() => {
@@ -414,7 +434,10 @@ export default function LoveMap() {
           toast.success("Đã hoàn thành tua lại hành trình! 💕");
         } else {
           setReliveIndex(cur);
-          focusOnLocation(coords[cur].lat, coords[cur].lng, 15);
+          const nextPt = coords[cur];
+          if (nextPt && typeof nextPt.lat === 'number' && typeof nextPt.lng === 'number') {
+            focusOnLocation(nextPt.lat, nextPt.lng, 15);
+          }
         }
       }, 700); // Step every 700ms
 
@@ -435,7 +458,7 @@ export default function LoveMap() {
           <div class="marker-avatar-container">
             ${avatarUrl 
               ? `<img src="${avatarUrl}" class="marker-avatar" />` 
-              : `<span class="marker-emoji">${emoji}</span>`
+              : `<span class="marker-emoji">${emoji || '📍'}</span>`
             }
           </div>
         </div>
@@ -518,8 +541,10 @@ export default function LoveMap() {
     });
   };
 
-  // Prepare journey path line coordinates
-  const pathPositions = memories.map(m => [m.latitude, m.longitude]);
+  // Filter valid memory coordinates safely
+  const pathPositions = memories
+    .filter(m => m && typeof m.latitude === 'number' && typeof m.longitude === 'number')
+    .map(m => [m.latitude, m.longitude]);
 
   return (
     <div className="flex flex-col h-[calc(100vh-140px)] w-full relative love-map-container no-scrollbar overflow-hidden">
@@ -620,29 +645,33 @@ export default function LoveMap() {
           )}
 
           {/* Saved Selected Love Journey Path */}
-          {selectedJourney && selectedJourney.coords && selectedJourney.coords.length > 1 && (
+          {selectedJourney && Array.isArray(selectedJourney.coords) && selectedJourney.coords.length > 1 && (
             <>
               <Polyline
-                positions={selectedJourney.coords}
+                positions={selectedJourney.coords.filter(c => c && typeof c.lat === 'number' && typeof c.lng === 'number').map(c => [c.lat, c.lng])}
                 pathOptions={{
                   color: '#06b6d4',
                   weight: 4,
                   className: 'love-journey-path'
                 }}
               />
-              <Marker 
-                position={[selectedJourney.coords[0].lat, selectedJourney.coords[0].lng]}
-                icon={createStartEndIcon('🟢')}
-              />
-              <Marker 
-                position={[selectedJourney.coords[selectedJourney.coords.length - 1].lat, selectedJourney.coords[selectedJourney.coords.length - 1].lng]}
-                icon={createStartEndIcon('🏁')}
-              />
+              {selectedJourney.coords[0] && typeof selectedJourney.coords[0].lat === 'number' && (
+                <Marker 
+                  position={[selectedJourney.coords[0].lat, selectedJourney.coords[0].lng]}
+                  icon={createStartEndIcon('🟢')}
+                />
+              )}
+              {selectedJourney.coords[selectedJourney.coords.length - 1] && typeof selectedJourney.coords[selectedJourney.coords.length - 1].lat === 'number' && (
+                <Marker 
+                  position={[selectedJourney.coords[selectedJourney.coords.length - 1].lat, selectedJourney.coords[selectedJourney.coords.length - 1].lng]}
+                  icon={createStartEndIcon('🏁')}
+                />
+              )}
             </>
           )}
 
           {/* Journey Relive Avatar Marker Animation */}
-          {isReliving && selectedJourney && reliveIndex < selectedJourney.coords.length && (
+          {isReliving && selectedJourney && Array.isArray(selectedJourney.coords) && reliveIndex < selectedJourney.coords.length && selectedJourney.coords[reliveIndex] && typeof selectedJourney.coords[reliveIndex].lat === 'number' && (
             <Marker 
               position={[selectedJourney.coords[reliveIndex].lat, selectedJourney.coords[reliveIndex].lng]}
               icon={createReliveIcon()}
@@ -650,10 +679,10 @@ export default function LoveMap() {
           )}
 
           {/* Active Recording Love Journey Path */}
-          {isRecordingJourney && journeyCoords.length > 1 && (
+          {isRecordingJourney && Array.isArray(journeyCoords) && journeyCoords.length > 1 && (
             <>
               <Polyline
-                positions={journeyCoords}
+                positions={journeyCoords.filter(c => c && typeof c.lat === 'number' && typeof c.lng === 'number').map(c => [c.lat, c.lng])}
                 pathOptions={{
                   color: '#ef4444',
                   dashArray: '4, 8',
@@ -661,30 +690,34 @@ export default function LoveMap() {
                   className: 'love-journey-path-active'
                 }}
               />
-              <Marker 
-                position={[journeyCoords[0].lat, journeyCoords[0].lng]}
-                icon={createStartEndIcon('👣')}
-              />
+              {journeyCoords[0] && typeof journeyCoords[0].lat === 'number' && (
+                <Marker 
+                  position={[journeyCoords[0].lat, journeyCoords[0].lng]}
+                  icon={createStartEndIcon('👣')}
+                />
+              )}
             </>
           )}
 
           {/* Memory Pins */}
           {memories.map((m) => (
-            <Marker
-              key={m.id}
-              position={[m.latitude, m.longitude]}
-              icon={createMemoryIcon(m.createdBy, m.emoji)}
-              eventHandlers={{
-                click: () => {
-                  setSelectedMemory(m);
-                  setSelectedJourney(null);
-                }
-              }}
-            />
+            m && typeof m.latitude === 'number' && typeof m.longitude === 'number' && (
+              <Marker
+                key={m.id}
+                position={[m.latitude, m.longitude]}
+                icon={createMemoryIcon(m.createdBy, m.emoji)}
+                eventHandlers={{
+                  click: () => {
+                    setSelectedMemory(m);
+                    setSelectedJourney(null);
+                  }
+                }}
+              />
+            )
           ))}
 
           {/* currentUser Own Realtime Position Pin */}
-          {isSharingLocation && myLocation && (
+          {isSharingLocation && myLocation && typeof myLocation.lat === 'number' && typeof myLocation.lng === 'number' && (
             <Marker
               position={[myLocation.lat, myLocation.lng]}
               icon={createMyLocationIcon(currentUser?.email || '')}
@@ -692,7 +725,7 @@ export default function LoveMap() {
           )}
 
           {/* Partner Realtime Position Pin */}
-          {partnerLocation && (
+          {partnerLocation && typeof partnerLocation.lat === 'number' && typeof partnerLocation.lng === 'number' && (
             <Marker
               position={[partnerLocation.lat, partnerLocation.lng]}
               icon={createPartnerLocationIcon(
@@ -744,7 +777,7 @@ export default function LoveMap() {
                   <div className="flex items-center gap-1.5 text-slate-400">
                     <Calendar size={11} />
                     <span className="text-[10px] font-semibold tracking-wider">
-                      {selectedMemory.date.split('-').reverse().join('/')}
+                      {selectedMemory.date ? selectedMemory.date.split('-').reverse().join('/') : ''}
                     </span>
                   </div>
                   {/* Delete memory button (only visible to creator) */}
@@ -793,12 +826,12 @@ export default function LoveMap() {
               <div className="flex items-center gap-1.5 text-slate-400">
                 <Calendar size={11} />
                 <span className="text-[10px] font-semibold tracking-wider">
-                  {selectedJourney.date.split('-').reverse().join('/')}
+                  {selectedJourney.date ? selectedJourney.date.split('-').reverse().join('/') : ''}
                 </span>
               </div>
               
               <h4 className="font-bold text-sm text-slate-800 mt-0.5">🗺️ {selectedJourney.title}</h4>
-              {selectedJourney.notes && <p className="text-xs text-slate-600 italic leading-relaxed">"{selectedJourney.notes}"</p>}
+              {selectedJourney.notes && <p className="text-xs text-slate-600 italic">"{selectedJourney.notes}"</p>}
               
               {/* Journey info pills */}
               <div className="flex gap-2 mt-1">
@@ -898,7 +931,9 @@ export default function LoveMap() {
                     key={mem.id}
                     onClick={() => {
                       setShowListDialog(false);
-                      focusOnLocation(mem.latitude, mem.longitude, 15);
+                      if (typeof mem.latitude === 'number' && typeof mem.longitude === 'number') {
+                        focusOnLocation(mem.latitude, mem.longitude, 15);
+                      }
                       setSelectedMemory(mem);
                       setSelectedJourney(null);
                     }}
@@ -908,10 +943,10 @@ export default function LoveMap() {
                       {mem.emoji || '📍'}
                     </div>
                     <div className="flex-1 min-w-0 text-left font-body">
-                      <p className="text-xs font-semibold text-foreground line-clamp-2 leading-relaxed">"{mem.notes}"</p>
+                      <p className="text-xs font-semibold text-foreground line-clamp-2 leading-relaxed">"{mem.notes || ''}"</p>
                       <div className="flex items-center justify-between mt-2">
                         <span className="text-[9px] text-muted-foreground">
-                          {mem.date.split('-').reverse().join('/')}
+                          {mem.date ? mem.date.split('-').reverse().join('/') : ''}
                         </span>
                         <span className="text-[9px] px-2 py-0.5 rounded-full bg-primary/20 text-primary font-bold">
                           {profiles[mem.createdBy]?.display_name?.split(' ')[0] || mem.createdBy.split('@')[0]}
@@ -930,7 +965,7 @@ export default function LoveMap() {
                     key={jn.id}
                     onClick={() => {
                       setShowListDialog(false);
-                      if (jn.coords && jn.coords.length > 0) {
+                      if (Array.isArray(jn.coords) && jn.coords.length > 0 && jn.coords[0] && typeof jn.coords[0].lat === 'number') {
                         focusOnLocation(jn.coords[0].lat, jn.coords[0].lng, 13);
                       }
                       setSelectedJourney(jn);
@@ -955,7 +990,7 @@ export default function LoveMap() {
                       </div>
                       <div className="flex items-center justify-between mt-2">
                         <span className="text-[9px] text-muted-foreground">
-                          {jn.date.split('-').reverse().join('/')}
+                          {jn.date ? jn.date.split('-').reverse().join('/') : ''}
                         </span>
                         <span className="text-[9px] px-2 py-0.5 rounded-full bg-cyan-500/20 text-cyan-400 font-bold">
                           {profiles[jn.createdBy]?.display_name?.split(' ')[0] || jn.createdBy.split('@')[0]}
