@@ -28,6 +28,7 @@ export default function Layout() {
   const [showNotificationPrompt, setShowNotificationPrompt] = useState(false);
   const { totalUnreadCount, globalUnreadCount } = useAuth();
   const [globalInvite, setGlobalInvite] = useState(null);
+  const [caroInvite, setCaroInvite] = useState(null);
   
   // Lắng nghe thay đổi User Auth (Kể cả khi F5) và lưu local state
   const [localUser, setLocalUser] = useState(auth.currentUser);
@@ -63,6 +64,30 @@ export default function Layout() {
       setGlobalInvite(activeInvite);
     }, (error) => {
       console.error("Firestore global invite listener error:", error);
+    });
+
+    return () => unsubscribe();
+  }, [localUser]);
+
+  // Global Listener for Caro Invite
+  useEffect(() => {
+    if (!localUser || !localUser.email) return;
+
+    const myEmailLower = localUser.email.toLowerCase();
+
+    const unsubscribe = onSnapshot(doc(db, 'caro_games', 'couple_caro'), (snap) => {
+      if (snap.exists()) {
+        const data = snap.data();
+        if (data.status === 'inviting' && data.receiver_email === myEmailLower && data.host_email !== myEmailLower) {
+          setCaroInvite(data);
+        } else {
+          setCaroInvite(null);
+        }
+      } else {
+        setCaroInvite(null);
+      }
+    }, (error) => {
+      console.error("Firestore caro global invite error:", error);
     });
 
     return () => unsubscribe();
@@ -273,6 +298,65 @@ export default function Layout() {
                         updated_at: new Date()
                       });
                       setGlobalInvite(null);
+                    } catch(e) {}
+                  }}
+                  className="flex-1 py-2.5 rounded-2xl text-muted-foreground hover:bg-white/10 text-sm font-semibold bg-white/5 active:scale-95 transition-all text-center"
+                >
+                  Bỏ qua
+                </button>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Global Caro Invite Card (Floating) */}
+      <AnimatePresence>
+        {caroInvite && location.pathname !== '/games' && (
+          <motion.div
+            initial={{ opacity: 0, y: 50, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 20, scale: 0.95 }}
+            className="fixed bottom-24 left-4 right-4 z-[9999] mx-auto max-w-sm"
+          >
+            <div className="liquid-glass border-cyan-500/40 p-4 rounded-3xl shadow-2xl flex flex-col gap-3 bg-[#181116]/85 backdrop-blur-xl text-white rim-light">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-full bg-cyan-500/20 flex items-center justify-center flex-shrink-0 animate-pulse text-lg">
+                  ❌
+                </div>
+                <div className="flex-1 min-w-0 text-left">
+                  <p className="font-bold text-sm text-foreground flex items-center gap-1.5">
+                    Lời mời đấu cờ XO <span className="text-xs">🎮</span>
+                  </p>
+                  <p className="text-xs text-muted-foreground leading-normal mt-0.5">
+                    <span className="font-bold text-foreground">{caroInvite.host_name}</span> muốn rủ bạn cùng đấu một ván cờ Caro 3x3!
+                  </p>
+                </div>
+              </div>
+              <div className="flex gap-2 mt-1">
+                <button
+                  onClick={async () => {
+                    try {
+                      await updateDoc(doc(db, 'caro_games', 'couple_caro'), {
+                        status: 'playing',
+                        updatedAt: new Date()
+                      });
+                      setCaroInvite(null);
+                      navigate('/games');
+                    } catch(e) {}
+                  }}
+                  className="flex-1 py-2.5 rounded-2xl text-white font-bold text-sm bg-cyan-500 shadow-lg hover:opacity-90 active:scale-95 transition-all text-center"
+                >
+                  Chiến luôn ⚔️
+                </button>
+                <button
+                  onClick={async () => {
+                    try {
+                      await updateDoc(doc(db, 'caro_games', 'couple_caro'), {
+                        status: 'declined',
+                        updatedAt: new Date()
+                      });
+                      setCaroInvite(null);
                     } catch(e) {}
                   }}
                   className="flex-1 py-2.5 rounded-2xl text-muted-foreground hover:bg-white/10 text-sm font-semibold bg-white/5 active:scale-95 transition-all text-center"

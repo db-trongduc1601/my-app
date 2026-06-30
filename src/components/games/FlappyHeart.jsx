@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { db, auth } from '../../firebase';
 import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { toast } from 'sonner';
-import { RefreshCw, Trophy, Zap, AlertCircle } from 'lucide-react';
+import { RefreshCw, Trophy, AlertCircle } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { cn } from '@/lib/utils';
 
@@ -57,20 +57,20 @@ export default function FlappyHeart({ currentHighScores }) {
     canvas.width = 320;
     canvas.height = 420;
 
-    // Game variables
+    // Eased physics game variables for relaxing casual gaming!
     let heart = {
       x: 60,
       y: 200,
       radius: 12,
       velocity: 0,
-      gravity: 0.35,
-      jumpForce: -5.5
+      gravity: 0.18, // Eased (was 0.35)
+      jumpForce: -3.8 // Eased (was -5.5)
     };
 
     let pipes = [];
     let pipeWidth = 48;
-    let pipeGap = 100;
-    let pipeSpeed = 2.0;
+    let pipeGap = 130; // Eased (was 100)
+    let pipeSpeed = 1.25; // Eased (was 2.0)
     let frameCount = 0;
     let currentScore = 0;
     let active = isPlaying && !gameOver;
@@ -104,23 +104,20 @@ export default function FlappyHeart({ currentHighScores }) {
     canvas.addEventListener('mousedown', handleCanvasClick);
     canvas.addEventListener('touchstart', handleCanvasClick, { passive: false });
 
-    // Initial pipe spawn
     if (isPlaying && !gameOver) {
       spawnPipe();
     }
 
     const gameLoop = () => {
-      // Clear canvas
       ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-      // 1. Draw Background (Liquid Glass soft pink sky gradient)
+      // 1. Draw Background
       const skyGrad = ctx.createLinearGradient(0, 0, 0, canvas.height);
       skyGrad.addColorStop(0, '#2d1822');
       skyGrad.addColorStop(1, '#130a0f');
       ctx.fillStyle = skyGrad;
       ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-      // Draw light particles in background
       ctx.fillStyle = 'rgba(244, 114, 182, 0.05)';
       ctx.beginPath();
       ctx.arc(100, 120, 80, 0, Math.PI * 2);
@@ -132,7 +129,6 @@ export default function FlappyHeart({ currentHighScores }) {
         heart.velocity += heart.gravity;
         heart.y += heart.velocity;
 
-        // Ceiling/Floor boundaries check
         if (heart.y + heart.radius > canvas.height) {
           triggerGameOver();
         }
@@ -141,9 +137,9 @@ export default function FlappyHeart({ currentHighScores }) {
           heart.velocity = 0;
         }
 
-        // 3. Spawning obstacles
+        // 3. Spawning obstacles (Eased frequency to 150 frames)
         frameCount++;
-        if (frameCount % 90 === 0) {
+        if (frameCount % 150 === 0) {
           spawnPipe();
         }
 
@@ -152,7 +148,7 @@ export default function FlappyHeart({ currentHighScores }) {
           const pipe = pipes[i];
           pipe.x -= pipeSpeed;
 
-          // Draw Top Pipe (Liquid glass neon green/cyan glow)
+          // Draw Top Pipe
           const topGrad = ctx.createLinearGradient(pipe.x, 0, pipe.x + pipeWidth, 0);
           topGrad.addColorStop(0, 'rgba(236, 72, 153, 0.15)');
           topGrad.addColorStop(0.5, 'rgba(236, 72, 153, 0.45)');
@@ -161,7 +157,6 @@ export default function FlappyHeart({ currentHighScores }) {
           ctx.strokeStyle = 'rgba(236, 72, 153, 0.6)';
           ctx.lineWidth = 1.5;
 
-          // Draw top pipe rect
           ctx.beginPath();
           ctx.roundRect(pipe.x, 0, pipeWidth, pipe.topHeight, [0, 0, 10, 10]);
           ctx.fill();
@@ -179,19 +174,16 @@ export default function FlappyHeart({ currentHighScores }) {
           ctx.fill();
           ctx.stroke();
 
-          // Check score count passes
           if (!pipe.passed && pipe.x + pipeWidth < heart.x) {
             pipe.passed = true;
             currentScore++;
             setScore(currentScore);
           }
 
-          // Check collisions
           if (
             heart.x + heart.radius > pipe.x &&
             heart.x - heart.radius < pipe.x + pipeWidth
           ) {
-            // Horizontal overlap, check vertical
             if (
               heart.y - heart.radius < pipe.topHeight ||
               heart.y + heart.radius > canvas.height - pipe.bottomHeight
@@ -200,26 +192,23 @@ export default function FlappyHeart({ currentHighScores }) {
             }
           }
 
-          // Delete offscreen pipes
           if (pipe.x + pipeWidth < 0) {
             pipes.splice(i, 1);
           }
         }
       } else if (!isPlaying && !gameOver) {
-        // Draw prompt before playing
         ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
-        ctx.font = 'bold 12px Outfit, sans-serif';
+        ctx.font = 'bold 11px Outfit, sans-serif';
         ctx.textAlign = 'center';
-        ctx.fillText('CLICK / CHẠM VÀO ĐÂY ĐỂ BAY 🚀', canvas.width / 2, canvas.height / 2 + 50);
+        ctx.fillText('CLICK / CHẠM VÀO ĐÂY ĐỂ BAY 🚀 (ĐÃ GIẢM KHÓ)', canvas.width / 2, canvas.height / 2 + 50);
       }
 
-      // 5. Draw flying Heart (Standard text emoji is perfectly responsive)
+      // 5. Draw flying Heart
       ctx.save();
       ctx.font = '24px Arial';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       
-      // Rotate heart slightly depending on velocity
       ctx.translate(heart.x, heart.y);
       let angle = Math.min(Math.max(heart.velocity * 0.07, -0.5), 0.5);
       ctx.rotate(angle);
@@ -239,7 +228,6 @@ export default function FlappyHeart({ currentHighScores }) {
       }
     };
 
-    // Draw initial state once
     gameLoop();
 
     return () => {
