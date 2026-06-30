@@ -436,6 +436,53 @@ export default function LoveMap() {
     }
   };
 
+  const handleSaveMemory = async (e) => {
+    e.preventDefault();
+    if (!clickCoords || !noteText.trim()) return;
+
+    setUploading(true);
+    let imageUrl = '';
+
+    try {
+      if (photoFile) {
+        const fileRef = ref(storage, `love_memories/${Date.now()}_${photoFile.name}`);
+        const uploadResult = await uploadBytes(fileRef, photoFile);
+        imageUrl = await getDownloadURL(uploadResult.ref);
+      }
+
+      await addDoc(collection(db, 'love_memories'), {
+        createdBy: currentUser.email.toLowerCase(),
+        latitude: clickCoords.lat,
+        longitude: clickCoords.lng,
+        emoji: selectedEmoji,
+        notes: noteText.trim(),
+        date: memoryDate,
+        imageUrl,
+        createdAt: serverTimestamp()
+      });
+
+      toast.success("Đã ghim kỷ niệm của hai đứa! 💕");
+      setShowAddDialog(false);
+    } catch (err) {
+      console.error(err);
+      toast.error("Có lỗi xảy ra khi lưu kỷ niệm!");
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const handleDeleteMemory = async (id) => {
+    if (!window.confirm("Bạn có chắc chắn muốn xóa kỷ niệm này không?")) return;
+    try {
+      await deleteDoc(doc(db, 'love_memories', id));
+      setSelectedMemory(null);
+      toast.success("Đã xóa kỷ niệm.");
+    } catch (err) {
+      console.error(err);
+      toast.error("Không thể xóa kỷ niệm này!");
+    }
+  };
+
   // ── Journey Relive Animation ticker ──────────────────────────────────────
   useEffect(() => {
     if (isReliving && selectedJourney && Array.isArray(selectedJourney.coords) && selectedJourney.coords.length > 0) {
