@@ -62,6 +62,7 @@ export default function BlockBlast({ currentHighScores }) {
 
   const boardRef = useRef(null);
   const touchStartRef = useRef({ x: 0, y: 0 });
+  const blockRefs = useRef([]);
 
   // Load high score
   useEffect(() => {
