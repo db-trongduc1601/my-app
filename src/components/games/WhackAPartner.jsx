@@ -67,8 +67,9 @@ export default function WhackAPartner({ currentHighScores }) {
 
   // 3. Load high score
   useEffect(() => {
-    if (currentHighScores && myEmailLower) {
-      setHighScore(currentHighScores[myEmailLower] || 0);
+    const scores = currentHighScores || {};
+    if (myEmailLower) {
+      setHighScore(scores[myEmailLower] || 0);
     }
   }, [currentHighScores, myEmailLower]);
 
@@ -76,7 +77,8 @@ export default function WhackAPartner({ currentHighScores }) {
   const updateHighScore = async (newScore) => {
     if (!myEmailLower) return;
     try {
-      const newScores = { ...currentHighScores, [myEmailLower]: newScore };
+      const scores = currentHighScores || {};
+      const newScores = { ...scores, [myEmailLower]: newScore };
       await setDoc(doc(db, 'game_high_scores', 'whack_a_partner'), {
         scores: newScores,
         updatedAt: serverTimestamp()
@@ -173,7 +175,8 @@ export default function WhackAPartner({ currentHighScores }) {
   // Check Game Over score sync
   useEffect(() => {
     if (gameOver && !instantDefeat) {
-      if (score > (currentHighScores[myEmailLower] || 0)) {
+      const scores = currentHighScores || {};
+      if (score > (scores[myEmailLower] || 0)) {
         updateHighScore(score);
       }
     }
@@ -185,8 +188,13 @@ export default function WhackAPartner({ currentHighScores }) {
 
     const moleType = moles[index];
     const rect = e.currentTarget.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
+    
+    // Safely get client X and Y coordinates (supporting both mouse and touch events)
+    const clientX = e.clientX !== undefined ? e.clientX : (e.touches?.[0]?.clientX !== undefined ? e.touches?.[0]?.clientX : null);
+    const clientY = e.clientY !== undefined ? e.clientY : (e.touches?.[0]?.clientY !== undefined ? e.touches?.[0]?.clientY : null);
+    
+    const x = clientX !== null ? (clientX - rect.left) : (rect.width / 2);
+    const y = clientY !== null ? (clientY - rect.top) : (rect.height / 2);
 
     if (moleType === 'target') {
       // Hit partner! +10 score
@@ -194,7 +202,7 @@ export default function WhackAPartner({ currentHighScores }) {
       setScore(prev => prev + points);
       
       const floaterId = Math.random();
-      setFloaters(prev => [...prev, { id: floaterId, text: '+10', x, y }]);
+      setFloaters(prev => [...prev, { id: floaterId, text: '+10', x, y, index }]);
       setTimeout(() => {
         setFloaters(prev => prev.filter(f => f.id !== floaterId));
       }, 800);
@@ -286,7 +294,7 @@ export default function WhackAPartner({ currentHighScores }) {
                 <div className="absolute inset-0 rounded-full bg-gradient-to-br from-white/10 to-transparent pointer-events-none" />
               </div>
 
-              {floaters.map(f => (
+              {floaters.filter(f => f.index === idx).map(f => (
                 <span
                   key={f.id}
                   className="absolute font-black text-lg pointer-events-none animate-float-up z-20 select-none text-green-400 text-glow-green"
