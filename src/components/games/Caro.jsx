@@ -69,6 +69,8 @@ export default function Caro() {
   const [pvpPlayerSymbol, setPvpPlayerSymbol] = useState('');
   const [pvpPartnerSymbol, setPvpPartnerSymbol] = useState('');
 
+  const firedConfettiRef = React.useRef(false);
+
   // ── 1. Load accepted friends + profiles ────────────────────────────────────
   useEffect(() => {
     if (!myEmail) return;
@@ -123,7 +125,10 @@ export default function Caro() {
         setWinner(w);
         if (w && w !== 'Draw') {
           const iWon = w === pvpPlayerSymbol;
-          if (iWon) confetti({ particleCount: 100, spread: 60, origin: { y: 0.6 } });
+          if (iWon && !firedConfettiRef.current) {
+            firedConfettiRef.current = true;
+            confetti({ particleCount: 100, spread: 60, origin: { y: 0.6 } });
+          }
         }
       } else {
         setDbGame(null);
@@ -289,6 +294,7 @@ export default function Caro() {
   };
 
   const handleRestart = () => {
+    firedConfettiRef.current = false;
     if (isPvP) { resetPvPBoard(); }
     else { setBoard(Array(9).fill(null)); setIsXNext(true); setWinner(null); }
   };
@@ -396,7 +402,14 @@ export default function Caro() {
       ) : (
         <>
           {/* Status bar */}
-          <div className="w-full flex justify-between items-center liquid-glass px-4 py-2.5 rounded-2xl border-none shadow-md">
+          <motion.div
+            animate={winner && winner !== 'Draw' && winner !== pvpPlayerSymbol ? {
+              x: [0, -4, 4, -4, 4, -2, 2, 0],
+              opacity: 0.65
+            } : {}}
+            transition={{ duration: 0.25 }}
+            className="w-full flex justify-between items-center liquid-glass px-4 py-2.5 rounded-2xl border-none shadow-md"
+          >
             <div className="flex items-center gap-1.5">
               <span className="text-lg">⚔️</span>
               <span className="text-xs font-bold text-muted-foreground">
@@ -414,7 +427,7 @@ export default function Caro() {
                 Bạn: {pvpPlayerSymbol}
               </span>
             )}
-          </div>
+          </motion.div>
 
           {/* Board */}
           <div className="w-full aspect-square bg-[#1c1219]/95 border border-white/10 rounded-3xl p-4 grid grid-cols-3 grid-rows-3 gap-3 touch-action-none shadow-xl relative overflow-hidden">
@@ -429,9 +442,15 @@ export default function Caro() {
                 {cell && (
                   <>
                     <div className="absolute inset-px rounded-xl bg-white/10 border-t border-l border-white/20 pointer-events-none" />
-                    <span className={cn('select-none drop-shadow-md', cell === 'X' ? 'text-primary text-glow' : 'text-cyan-400')}>
+                    <motion.span
+                      animate={winner && winner !== 'Draw' && cell !== winner ? {
+                        scale: 0.75,
+                        opacity: 0.3
+                      } : {}}
+                      className={cn('select-none drop-shadow-md', cell === 'X' ? 'text-primary text-glow' : 'text-cyan-400')}
+                    >
                       {cell}
-                    </span>
+                    </motion.span>
                   </>
                 )}
               </button>
@@ -449,14 +468,21 @@ export default function Caro() {
           {/* Winner overlay */}
           {winner && (
             <div className="absolute inset-0 bg-[#181116]/80 backdrop-blur-md rounded-3xl z-[1000] flex flex-col items-center justify-center p-6 space-y-4 border border-white/10 font-display">
-              <span className="text-4xl">🏆</span>
-              <h2 className="text-xl font-bold text-glow">
-                {winner === 'Draw'
-                  ? 'Kết quả: Hòa cờ! 🤝'
-                  : isPvP
-                    ? winner === pvpPlayerSymbol ? 'Bạn đã thắng! 🎉' : `${getName(partnerEmail)} đã thắng! 🥺`
-                    : winner === 'X' ? 'Bạn đã thắng AI! 🎉' : 'AI đã thắng bạn! 🤖'}
-              </h2>
+              <motion.div
+                initial={{ scale: 0.5, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                transition={{ duration: 0.3, ease: "easeOut" }}
+                className="flex flex-col items-center space-y-4"
+              >
+                <span className="text-4xl">🏆</span>
+                <h2 className="text-xl font-bold text-glow">
+                  {winner === 'Draw'
+                    ? 'Kết quả: Hòa cờ! 🤝'
+                    : isPvP
+                      ? winner === pvpPlayerSymbol ? 'Bạn đã thắng! 🎉' : `${getName(partnerEmail)} đã thắng! 🥺`
+                      : winner === 'X' ? 'Bạn đã thắng AI! 🎉' : 'AI đã thắng bạn! 🤖'}
+                </h2>
+              </motion.div>
               <button
                 onClick={handleRestart}
                 className="flex items-center gap-1.5 px-6 py-2.5 rounded-2xl gradient-primary text-white text-xs font-bold shadow-lg transition hover:scale-105 active:scale-95 cursor-pointer"

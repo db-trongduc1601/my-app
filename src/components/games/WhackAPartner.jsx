@@ -5,6 +5,7 @@ import { toast } from 'sonner';
 import { RefreshCw, Trophy, Zap, AlertCircle, Play, Users } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { cn } from '@/lib/utils';
+import { motion } from 'framer-motion';
 
 export default function WhackAPartner({ currentHighScores }) {
   const currentUser = auth.currentUser;
@@ -24,6 +25,7 @@ export default function WhackAPartner({ currentHighScores }) {
   
   const [moles, setMoles] = useState(Array(9).fill(null)); // null, 'target', 'self'
   const [floaters, setFloaters] = useState([]); // array of { id, text, x, y }
+  const [particles, setParticles] = useState([]); // array of { id, text, x, y, index, dx, dy, emoji }
 
   const popTimerRef = useRef(null);
   const gameTimerRef = useRef(null);
@@ -143,6 +145,7 @@ export default function WhackAPartner({ currentHighScores }) {
     setTimeLeft(30);
     setMoles(Array(9).fill(null));
     setFloaters([]);
+    setParticles([]);
 
     // 1. Spawner interval
     const runSpawner = () => {
@@ -213,6 +216,29 @@ export default function WhackAPartner({ currentHighScores }) {
         next[index] = null;
         return next;
       });
+
+      // Spawn star particle burst
+      const count = 5;
+      const newParticles = [];
+      const emojis = ['✨', '⭐', '💖', '🌸', '💥'];
+      for (let i = 0; i < count; i++) {
+        const angle = (i / count) * Math.PI * 2 + Math.random() * 0.4;
+        const speed = 25 + Math.random() * 25;
+        newParticles.push({
+          id: Math.random(),
+          index,
+          x,
+          y,
+          dx: Math.cos(angle) * speed,
+          dy: Math.sin(angle) * speed,
+          emoji: emojis[Math.floor(Math.random() * emojis.length)]
+        });
+      }
+      setParticles(prev => [...prev, ...newParticles]);
+      setTimeout(() => {
+        const ids = newParticles.map(p => p.id);
+        setParticles(prev => prev.filter(p => !ids.includes(p.id)));
+      }, 600);
     } else {
       // Hit self! Instant Game Over defeat!
       setInstantDefeat(true);
@@ -226,6 +252,7 @@ export default function WhackAPartner({ currentHighScores }) {
     setGameOver(false);
     setInstantDefeat(false);
     setIsPlaying(false);
+    setParticles([]);
   };
 
   useEffect(() => {
@@ -310,6 +337,18 @@ export default function WhackAPartner({ currentHighScores }) {
                   {f.text}
                 </span>
               ))}
+
+              {particles.filter(p => p.index === idx).map(p => (
+                <motion.span
+                  key={p.id}
+                  initial={{ x: p.x, y: p.y, opacity: 1, scale: 0.6 }}
+                  animate={{ x: p.x + p.dx, y: p.y + p.dy, opacity: 0, scale: 1.2 }}
+                  transition={{ duration: 0.5, ease: "easeOut" }}
+                  className="absolute pointer-events-none text-base z-30 select-none"
+                >
+                  {p.emoji}
+                </motion.span>
+              ))}
             </div>
           );
         })}
@@ -331,7 +370,12 @@ export default function WhackAPartner({ currentHighScores }) {
               <h2 className="text-xl font-bold text-glow">
                 {instantDefeat ? "Thất Bại! 😵" : "Hết Giờ! ⏱️"}
               </h2>
-              <div className="text-center font-body space-y-1">
+              <motion.div
+                initial={{ scale: 0.5, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                transition={{ duration: 0.3, ease: "easeOut" }}
+                className="text-center font-body space-y-1"
+              >
                 <p className="text-xs text-muted-foreground">
                   {instantDefeat ? "Lý do: Tự đập trúng mình" : "Điểm số đập được:"}
                 </p>
@@ -339,7 +383,7 @@ export default function WhackAPartner({ currentHighScores }) {
                 {score >= highScore && score > 0 && !instantDefeat && (
                   <p className="text-[10px] text-yellow-400 font-bold uppercase tracking-wider mt-1">🎉 Kỷ lục mới của bạn!</p>
                 )}
-              </div>
+              </motion.div>
               <button
                 onClick={handleRestart}
                 className="flex items-center gap-1.5 px-6 py-2.5 rounded-2xl gradient-primary text-white text-xs font-bold shadow-lg transition hover:scale-105 active:scale-95 cursor-pointer animate-pulse"

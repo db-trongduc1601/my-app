@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { motion } from 'framer-motion';
 import { db, auth } from '../../firebase';
 import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { toast } from 'sonner';
@@ -14,6 +15,9 @@ export default function FlappyHeart({ currentHighScores }) {
   const [highScore, setHighScore] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
   const [gameOver, setGameOver] = useState(false);
+  const [shakeScore, setShakeScore] = useState(false);
+
+  const hasBeatenHighScoreRef = useRef(false);
 
   const canvasRef = useRef(null);
   const gameLoopRef = useRef(null);
@@ -178,6 +182,21 @@ export default function FlappyHeart({ currentHighScores }) {
             pipe.passed = true;
             currentScore++;
             setScore(currentScore);
+
+            const prevHigh = currentHighScores?.[myEmailLower] || 0;
+            if (currentScore > prevHigh) {
+              setHighScore(currentScore);
+              if (prevHigh > 0 && !hasBeatenHighScoreRef.current) {
+                hasBeatenHighScoreRef.current = true;
+                setShakeScore(true);
+                confetti({
+                  particleCount: 100,
+                  spread: 60,
+                  origin: { y: 0.6 }
+                });
+                setTimeout(() => setShakeScore(false), 200);
+              }
+            }
           }
 
           if (
@@ -241,6 +260,8 @@ export default function FlappyHeart({ currentHighScores }) {
     setScore(0);
     setGameOver(false);
     setIsPlaying(false);
+    setShakeScore(false);
+    hasBeatenHighScoreRef.current = false;
   };
 
   return (
@@ -249,7 +270,13 @@ export default function FlappyHeart({ currentHighScores }) {
       <div className="w-full flex justify-between items-center liquid-glass px-4 py-2.5 rounded-2xl border-none shadow-md">
         <div className="flex flex-col items-start">
           <span className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider">Điểm số</span>
-          <span className="text-xl font-black text-primary text-glow">{score}</span>
+          <motion.span
+            animate={shakeScore ? { x: [0, -4, 4, -4, 4, -2, 2, 0] } : {}}
+            transition={{ duration: 0.2 }}
+            className="text-xl font-black text-primary text-glow inline-block"
+          >
+            {score}
+          </motion.span>
         </div>
 
         <div className="flex flex-col items-end">
@@ -273,13 +300,18 @@ export default function FlappyHeart({ currentHighScores }) {
           <div className="absolute inset-0 bg-[#181116]/80 backdrop-blur-md z-[1000] flex flex-col items-center justify-center p-6 space-y-4 border border-white/10 animate-fade-in">
             <AlertCircle size={44} className="text-red-500 animate-bounce" />
             <h2 className="text-xl font-bold text-glow">Toang Rồi! 🥺</h2>
-            <div className="text-center font-body space-y-1">
+            <motion.div
+              initial={{ scale: 0.5, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              transition={{ duration: 0.3, ease: "easeOut" }}
+              className="text-center font-body space-y-1"
+            >
               <p className="text-xs text-muted-foreground">Điểm số đạt được:</p>
               <p className="text-2xl font-black text-primary text-glow">{score}đ</p>
               {score >= highScore && score > 0 && (
                 <p className="text-[10px] text-yellow-400 font-bold uppercase tracking-wider mt-1">🎉 Kỷ lục mới của bạn!</p>
               )}
-            </div>
+            </motion.div>
             <button
               onClick={handleRestart}
               className="flex items-center gap-1.5 px-6 py-2.5 rounded-2xl gradient-primary text-white text-xs font-bold shadow-lg transition hover:scale-105 active:scale-95 cursor-pointer"

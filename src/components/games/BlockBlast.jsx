@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { motion } from 'framer-motion';
 import { db, auth } from '../../firebase';
 import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { toast } from 'sonner';
@@ -53,6 +54,8 @@ export default function BlockBlast({ currentHighScores }) {
   const [upcomingBlocks, setUpcomingBlocks] = useState([]);
   const [gameOver, setGameOver] = useState(false);
   const [combo, setCombo] = useState(0);
+  const [hasBeatenHighScore, setHasBeatenHighScore] = useState(false);
+  const [shakeScore, setShakeScore] = useState(false);
 
   // Drag states
   const [draggingIndex, setDraggingIndex] = useState(null); // index (0,1,2) of upcoming block
@@ -81,6 +84,8 @@ export default function BlockBlast({ currentHighScores }) {
     setScore(0);
     setGameOver(false);
     setCombo(0);
+    setHasBeatenHighScore(false);
+    setShakeScore(false);
     setUpcomingBlocks(generateNewBlocks());
   };
 
@@ -310,6 +315,17 @@ export default function BlockBlast({ currentHighScores }) {
 
       if (newScore > highScore) {
         setHighScore(newScore);
+        const prevHigh = currentHighScores[myEmailLower] || 0;
+        if (prevHigh > 0 && !hasBeatenHighScore) {
+          setHasBeatenHighScore(true);
+          setShakeScore(true);
+          confetti({
+            particleCount: 100,
+            spread: 60,
+            origin: { y: 0.6 }
+          });
+          setTimeout(() => setShakeScore(false), 200);
+        }
       }
 
       // Update upcoming blocks
@@ -359,7 +375,13 @@ export default function BlockBlast({ currentHighScores }) {
       <div className="w-full flex justify-between items-center liquid-glass px-4 py-2.5 rounded-2xl border-none shadow-md">
         <div className="flex flex-col items-start">
           <span className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider">Điểm số</span>
-          <span className="text-xl font-black text-primary text-glow">{score}</span>
+          <motion.span
+            animate={shakeScore ? { x: [0, -4, 4, -4, 4, -2, 2, 0] } : {}}
+            transition={{ duration: 0.2 }}
+            className="text-xl font-black text-primary text-glow inline-block"
+          >
+            {score}
+          </motion.span>
         </div>
         
         {combo > 0 && (
@@ -536,13 +558,18 @@ export default function BlockBlast({ currentHighScores }) {
         <div className="absolute inset-0 bg-[#181116]/80 backdrop-blur-md rounded-3xl z-[1000] flex flex-col items-center justify-center p-6 space-y-4 border border-white/10 animate-fade-in font-display">
           <AlertCircle size={44} className="text-red-500 animate-bounce" />
           <h2 className="text-xl font-bold text-glow">Hết nước đi rồi! 🥺</h2>
-          <div className="text-center font-body space-y-1">
+          <motion.div
+            initial={{ scale: 0.5, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            transition={{ duration: 0.3, ease: "easeOut" }}
+            className="text-center font-body space-y-1"
+          >
             <p className="text-xs text-muted-foreground">Điểm số đạt được:</p>
             <p className="text-2xl font-black text-primary text-glow">{score}đ</p>
             {score >= highScore && score > 0 && (
               <p className="text-[10px] text-yellow-400 font-bold uppercase tracking-wider mt-1">🎉 Kỷ lục mới!</p>
             )}
-          </div>
+          </motion.div>
           <button
             onClick={startNewGame}
             className="flex items-center gap-1.5 px-6 py-2.5 rounded-2xl gradient-primary text-white text-xs font-bold shadow-lg transition hover:scale-105 active:scale-95 cursor-pointer"
