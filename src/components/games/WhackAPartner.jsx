@@ -221,6 +221,13 @@ export default function WhackAPartner({ currentHighScores }) {
     }
   };
 
+  const handleRestart = () => {
+    setScore(0);
+    setGameOver(false);
+    setInstantDefeat(false);
+    setIsPlaying(false);
+  };
+
   useEffect(() => {
     return () => {
       clearInterval(gameTimerRef.current);
