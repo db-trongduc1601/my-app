@@ -8,6 +8,7 @@ import { toast } from 'sonner';
 import { RefreshCw, ArrowRight } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { cn } from '@/lib/utils';
+import { motion } from 'framer-motion';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
