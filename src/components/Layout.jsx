@@ -69,29 +69,35 @@ export default function Layout() {
     return () => unsubscribe();
   }, [localUser]);
 
-  // Global Listener for Caro Invite
+
+  // Global Listener for Caro Invite — queries any per-pair doc where we are the receiver
   useEffect(() => {
     if (!localUser || !localUser.email) return;
 
     const myEmailLower = localUser.email.toLowerCase();
 
-    const unsubscribe = onSnapshot(doc(db, 'caro_games', 'couple_caro'), (snap) => {
-      if (snap.exists()) {
-        const data = snap.data();
-        if (data.status === 'inviting' && data.receiver_email === myEmailLower && data.host_email !== myEmailLower) {
-          setCaroInvite(data);
-        } else {
-          setCaroInvite(null);
+    const q = query(
+      collection(db, 'caro_games'),
+      where('receiver_email', '==', myEmailLower),
+      where('status', '==', 'inviting')
+    );
+
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      let invite = null;
+      snapshot.docs.forEach(docSnap => {
+        const data = docSnap.data();
+        if (data.host_email !== myEmailLower) {
+          invite = { id: docSnap.id, ...data };
         }
-      } else {
-        setCaroInvite(null);
-      }
+      });
+      setCaroInvite(invite);
     }, (error) => {
-      console.error("Firestore caro global invite error:", error);
+      console.error('Firestore caro global invite error:', error);
     });
 
     return () => unsubscribe();
   }, [localUser]);
+
 
   useEffect(() => {
     // Chỉ hiển thị nếu trình duyệt hỗ trợ Notification và quyền hiện tại là default

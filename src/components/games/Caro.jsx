@@ -1,302 +1,358 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { db, auth } from '../../firebase';
-import { doc, onSnapshot, setDoc, updateDoc, serverTimestamp } from 'firebase/firestore';
+import {
+  doc, onSnapshot, setDoc, updateDoc, getDocs,
+  collection, query, where, serverTimestamp
+} from 'firebase/firestore';
 import { toast } from 'sonner';
-import { RefreshCw, Trophy, ArrowRight, Zap, AlertCircle } from 'lucide-react';
+import { RefreshCw, ArrowRight } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { cn } from '@/lib/utils';
 
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+
 const WINNING_COMBOS = [
-  [0, 1, 2], [3, 4, 5], [6, 7, 8], // Rows
-  [0, 3, 6], [1, 4, 7], [2, 5, 8], // Columns
-  [0, 4, 8], [2, 4, 6]             // Diagonals
+  [0, 1, 2], [3, 4, 5], [6, 7, 8],
+  [0, 3, 6], [1, 4, 7], [2, 5, 8],
+  [0, 4, 8], [2, 4, 6],
 ];
+
+function checkWinner(grid) {
+  for (const [a, b, c] of WINNING_COMBOS) {
+    if (grid[a] && grid[a] === grid[b] && grid[a] === grid[c]) return grid[a];
+  }
+  if (grid.every(cell => cell !== null)) return 'Draw';
+  return null;
+}
+
+/**
+ * Derives a deterministic per-pair Firestore document ID.
+ * Both participants see the same ID regardless of who initiates.
+ */
+function pairDocId(emailA, emailB) {
+  return [emailA, emailB].sort().join('__');
+}
+
+/**
+ * Assigns symbols to two players deterministically by sorting their emails.
+ * The alphabetically-first email always gets 'X'; the second gets 'O'.
+ */
+function symbolForEmail(myEmail, partnerEmail) {
+  const sorted = [myEmail, partnerEmail].sort();
+  return myEmail === sorted[0] ? 'X' : 'O';
+}
+
+// ─── Component ───────────────────────────────────────────────────────────────
 
 export default function Caro() {
   const currentUser = auth.currentUser;
-  const myEmailLower = currentUser?.email?.toLowerCase() || '';
-  
-  // Players emails configuration
-  const ducEmail = 'trongduc16012003@gmail.com';
-  const quynhEmail = 'maianhquynh123@gmail.com';
-  const partnerEmail = myEmailLower === ducEmail ? quynhEmail : ducEmail;
+  const myEmail = currentUser?.email?.toLowerCase() || '';
 
-  // Game configuration states
-  const [isPvP, setIsPvP] = useState(false); // false = AI, true = PvP
+  // Accepted friends list
+  const [friends, setFriends] = useState([]);   // list of emails
+  const [profiles, setProfiles] = useState({}); // email → profile data
+
+  // Selected PvP partner
+  const [partnerEmail, setPartnerEmail] = useState('');
+
+  // Game mode
+  const [isPvP, setIsPvP] = useState(false);
+
+  // Local (AI) game state
   const [board, setBoard] = useState(Array(9).fill(null));
-  const [isXNext, setIsXNext] = useState(true); // X goes first
-  const [winner, setWinner] = useState(null); // null, 'X', 'O', 'Draw'
-  const [pvpTurn, setPvpTurn] = useState(''); // email of next player in PvP
-  const [pvpPlayerSymbol, setPvpPlayerSymbol] = useState(''); // 'X' or 'O' for current player in PvP
-  const [dbGame, setDbGame] = useState(null); // Full document state from Firestore
+  const [isXNext, setIsXNext] = useState(true);
+  const [winner, setWinner] = useState(null);
 
-  // 1. AI Logic Helper: Minimax algorithm
-  const checkWinner = (grid) => {
-    for (const [a, b, c] of WINNING_COMBOS) {
-      if (grid[a] && grid[a] === grid[b] && grid[a] === grid[c]) {
-        return grid[a];
+  // PvP synced state
+  const [dbGame, setDbGame] = useState(null);
+  const [pvpTurn, setPvpTurn] = useState('');
+  const [pvpPlayerSymbol, setPvpPlayerSymbol] = useState('');
+  const [pvpPartnerSymbol, setPvpPartnerSymbol] = useState('');
+
+  // ── 1. Load accepted friends + profiles ────────────────────────────────────
+  useEffect(() => {
+    if (!myEmail) return;
+    const load = async () => {
+      try {
+        const q1 = query(collection(db, 'friends'), where('owner_email', '==', myEmail), where('status', '==', 'accepted'));
+        const q2 = query(collection(db, 'friends'), where('friend_email', '==', myEmail), where('status', '==', 'accepted'));
+        const [s1, s2] = await Promise.all([getDocs(q1), getDocs(q2)]);
+        const list = [];
+        s1.forEach(d => list.push(d.data().friend_email?.toLowerCase()));
+        s2.forEach(d => list.push(d.data().owner_email?.toLowerCase()));
+        const unique = [...new Set(list.filter(Boolean))];
+        setFriends(unique);
+        if (unique.length > 0) setPartnerEmail(unique[0]);
+
+        // Load profiles
+        [myEmail, ...unique].forEach(email => {
+          onSnapshot(doc(db, 'user_profiles', email), snap => {
+            if (snap.exists()) setProfiles(prev => ({ ...prev, [email]: snap.data() }));
+          });
+        });
+      } catch (e) {
+        console.error('Caro: error loading friends', e);
       }
-    }
-    if (grid.every(cell => cell !== null)) return 'Draw';
-    return null;
-  };
+    };
+    load();
+  }, [myEmail]);
 
-  const minimax = useCallback((grid, depth, isMaximizing, aiSymbol, playerSymbol) => {
-    const scoreWinner = checkWinner(grid);
-    if (scoreWinner === aiSymbol) return 10 - depth;
-    if (scoreWinner === playerSymbol) return depth - 10;
-    if (scoreWinner === 'Draw') return 0;
+  // ── 2. Derive player symbols whenever partner changes ──────────────────────
+  useEffect(() => {
+    if (!myEmail || !partnerEmail) return;
+    const mine = symbolForEmail(myEmail, partnerEmail);
+    setPvpPlayerSymbol(mine);
+    setPvpPartnerSymbol(mine === 'X' ? 'O' : 'X');
+  }, [myEmail, partnerEmail]);
 
-    if (isMaximizing) {
-      let bestScore = -Infinity;
-      for (let i = 0; i < 9; i++) {
-        if (grid[i] === null) {
-          grid[i] = aiSymbol;
-          const score = minimax(grid, depth + 1, false, aiSymbol, playerSymbol);
-          grid[i] = null;
-          bestScore = Math.max(bestScore, score);
+  // ── 3. PvP real-time Firestore listener ────────────────────────────────────
+  useEffect(() => {
+    if (!isPvP || !myEmail || !partnerEmail) return;
+    const docId = pairDocId(myEmail, partnerEmail);
+
+    const unsub = onSnapshot(doc(db, 'caro_games', docId), snap => {
+      if (snap.exists()) {
+        const data = snap.data();
+        setDbGame(data);
+        const b = data.board || Array(9).fill(null);
+        setBoard(b);
+        setIsXNext(data.isXNext ?? true);
+        setPvpTurn(data.turn || '');
+
+        const w = checkWinner(b);
+        setWinner(w);
+        if (w && w !== 'Draw') {
+          const iWon = w === pvpPlayerSymbol;
+          if (iWon) confetti({ particleCount: 100, spread: 60, origin: { y: 0.6 } });
         }
+      } else {
+        setDbGame(null);
       }
-      return bestScore;
-    } else {
-      let bestScore = Infinity;
-      for (let i = 0; i < 9; i++) {
-        if (grid[i] === null) {
-          grid[i] = playerSymbol;
-          const score = minimax(grid, depth + 1, true, aiSymbol, playerSymbol);
-          grid[i] = null;
-          bestScore = Math.min(bestScore, score);
-        }
-      }
-      return bestScore;
-    }
-  }, []);
+    });
 
-  const getBestMove = useCallback((grid, aiSymbol, playerSymbol) => {
-    let bestScore = -Infinity;
-    let move = -1;
+    return () => unsub();
+  }, [isPvP, myEmail, partnerEmail, pvpPlayerSymbol]);
+
+  // ── 4. AI turn ─────────────────────────────────────────────────────────────
+  const minimax = useCallback((grid, depth, isMax, aiSym, plSym) => {
+    const w = checkWinner(grid);
+    if (w === aiSym) return 10 - depth;
+    if (w === plSym) return depth - 10;
+    if (w === 'Draw') return 0;
+
+    let best = isMax ? -Infinity : Infinity;
     for (let i = 0; i < 9; i++) {
       if (grid[i] === null) {
-        grid[i] = aiSymbol;
-        const score = minimax(grid, 0, false, aiSymbol, playerSymbol);
+        grid[i] = isMax ? aiSym : plSym;
+        const score = minimax(grid, depth + 1, !isMax, aiSym, plSym);
         grid[i] = null;
-        if (score > bestScore) {
-          bestScore = score;
-          move = i;
-        }
+        best = isMax ? Math.max(best, score) : Math.min(best, score);
+      }
+    }
+    return best;
+  }, []);
+
+  const getBestMove = useCallback((grid, aiSym, plSym) => {
+    let best = -Infinity, move = -1;
+    for (let i = 0; i < 9; i++) {
+      if (grid[i] === null) {
+        grid[i] = aiSym;
+        const score = minimax(grid, 0, false, aiSym, plSym);
+        grid[i] = null;
+        if (score > best) { best = score; move = i; }
       }
     }
     return move;
   }, [minimax]);
 
-  // PvP Real-time Firestore synchronization
   useEffect(() => {
-    if (!isPvP) return;
-
-    // Define symbols: X goes to Đức, O goes to Quỳnh
-    const mySymbol = myEmailLower === ducEmail ? 'X' : 'O';
-    setPvpPlayerSymbol(mySymbol);
-
-    const unsub = onSnapshot(doc(db, 'caro_games', 'couple_caro'), (snap) => {
-      if (snap.exists()) {
-        const data = snap.data();
-        setDbGame(data);
-        setBoard(data.board || Array(9).fill(null));
-        setIsXNext(data.isXNext ?? true);
-        setPvpTurn(data.turn || ducEmail);
-        
-        const gameWinner = checkWinner(data.board || Array(9).fill(null));
-        setWinner(gameWinner);
-
-        if (gameWinner && gameWinner !== 'Draw') {
-          const winningEmail = gameWinner === 'X' ? ducEmail : quynhEmail;
-          if (winningEmail === myEmailLower) {
-            confetti({ particleCount: 100, spread: 60, origin: { y: 0.6 } });
-          }
-        }
+    if (isPvP || winner || isXNext) return;
+    const t = setTimeout(() => {
+      const aiMove = getBestMove([...board], 'O', 'X');
+      if (aiMove !== -1) {
+        const next = [...board];
+        next[aiMove] = 'O';
+        setBoard(next);
+        setIsXNext(true);
+        setWinner(checkWinner(next));
       }
-    });
-
-    return () => unsub();
-  }, [isPvP, myEmailLower]);
-
-  // Handle AI turn triggers
-  useEffect(() => {
-    if (isPvP || winner) return;
-
-    if (!isXNext) {
-      const timer = setTimeout(() => {
-        const aiMove = getBestMove(board, 'O', 'X');
-        if (aiMove !== -1) {
-          const nextBoard = [...board];
-          nextBoard[aiMove] = 'O';
-          setBoard(nextBoard);
-          setIsXNext(true);
-          const gameWinner = checkWinner(nextBoard);
-          setWinner(gameWinner);
-        }
-      }, 500);
-      return () => clearTimeout(timer);
-    }
+    }, 500);
+    return () => clearTimeout(t);
   }, [isXNext, board, isPvP, winner, getBestMove]);
 
-  // Send invitation PvP
+  // ── 5. Invitation flow ─────────────────────────────────────────────────────
+  const docId = myEmail && partnerEmail ? pairDocId(myEmail, partnerEmail) : null;
+
   const sendInvitation = async () => {
+    if (!docId) return;
+    const firstTurn = [myEmail, partnerEmail].sort()[0]; // X starts
     try {
-      await setDoc(doc(db, 'caro_games', 'couple_caro'), {
+      await setDoc(doc(db, 'caro_games', docId), {
         board: Array(9).fill(null),
         isXNext: true,
-        turn: ducEmail, // Đức (X) starts PvP
+        turn: firstTurn,
         status: 'inviting',
-        host_email: myEmailLower,
-        host_name: currentUser.displayName?.split(' ')[0] || 'Bạn yêu',
+        host_email: myEmail,
+        host_name: currentUser.displayName?.split(' ')[0] || 'Bạn',
         receiver_email: partnerEmail,
-        updatedAt: serverTimestamp()
+        updatedAt: serverTimestamp(),
       });
-      toast.success("Đã gửi lời mời đấu cờ Caro! ⚔️");
+      toast.success('Đã gửi lời mời đấu cờ Caro! ⚔️');
     } catch (e) {
       console.error(e);
-      toast.error("Không thể gửi lời mời!");
+      toast.error('Không thể gửi lời mời!');
     }
   };
 
   const acceptInvitation = async () => {
+    if (!docId) return;
     try {
-      await updateDoc(doc(db, 'caro_games', 'couple_caro'), {
+      await updateDoc(doc(db, 'caro_games', docId), {
         status: 'playing',
-        updatedAt: serverTimestamp()
+        updatedAt: serverTimestamp(),
       });
-      toast.success("Trận đấu cờ Caro đã bắt đầu! ⚔️");
-    } catch (e) {
-      console.error(e);
-    }
+      toast.success('Trận đấu cờ Caro đã bắt đầu! ⚔️');
+    } catch (e) { console.error(e); }
   };
 
   const declineInvitation = async () => {
+    if (!docId) return;
     try {
-      await updateDoc(doc(db, 'caro_games', 'couple_caro'), {
+      await updateDoc(doc(db, 'caro_games', docId), {
         status: 'declined',
-        updatedAt: serverTimestamp()
+        updatedAt: serverTimestamp(),
       });
-      toast.info("Đã từ chối lời mời đấu cờ.");
-    } catch (e) {
-      console.error(e);
-    }
+      toast.info('Đã từ chối lời mời đấu cờ.');
+    } catch (e) { console.error(e); }
   };
 
   const cancelInvitation = async () => {
+    if (!docId) return;
     try {
-      await updateDoc(doc(db, 'caro_games', 'couple_caro'), {
+      await updateDoc(doc(db, 'caro_games', docId), {
         status: 'ended',
-        updatedAt: serverTimestamp()
+        updatedAt: serverTimestamp(),
       });
-      toast.info("Đã hủy lời mời.");
-    } catch (e) {
-      console.error(e);
-    }
+      toast.info('Đã hủy lời mời.');
+    } catch (e) { console.error(e); }
   };
 
-  // Make move triggers
+  const resetPvPBoard = async () => {
+    if (!docId) return;
+    const firstTurn = [myEmail, partnerEmail].sort()[0];
+    try {
+      await updateDoc(doc(db, 'caro_games', docId), {
+        board: Array(9).fill(null),
+        isXNext: true,
+        turn: firstTurn,
+        updatedAt: serverTimestamp(),
+      });
+    } catch (e) { console.error(e); }
+  };
+
+  // ── 6. Cell click ──────────────────────────────────────────────────────────
   const handleCellClick = async (index) => {
     if (board[index] || winner) return;
 
     if (isPvP) {
-      if (pvpTurn !== myEmailLower) {
-        toast.info("Chưa tới lượt của bạn đâu nhé! 🤫");
+      if (pvpTurn !== myEmail) {
+        toast.info('Chưa tới lượt của bạn đâu nhé! 🤫');
         return;
       }
-
-      const nextBoard = [...board];
-      nextBoard[index] = pvpPlayerSymbol;
+      const next = [...board];
+      next[index] = pvpPlayerSymbol;
       const nextIsXNext = !isXNext;
-      const nextTurn = pvpPlayerSymbol === 'X' ? quynhEmail : ducEmail;
-
+      const nextTurn = pvpPlayerSymbol === 'X' ? partnerEmail : myEmail;
+      // Actually: next turn = whichever player has the other symbol
+      // (works generically because symbol assignment is deterministic)
       try {
-        await updateDoc(doc(db, 'caro_games', 'couple_caro'), {
-          board: nextBoard,
+        await updateDoc(doc(db, 'caro_games', docId), {
+          board: next,
           isXNext: nextIsXNext,
           turn: nextTurn,
-          updatedAt: serverTimestamp()
+          updatedAt: serverTimestamp(),
         });
       } catch (e) {
         console.error(e);
-        toast.error("Không thể đi quân cờ!");
+        toast.error('Không thể đi quân cờ!');
       }
     } else {
-      // AI Mode
-      if (!isXNext) return; // Wait for AI
-      const nextBoard = [...board];
-      nextBoard[index] = 'X';
-      setBoard(nextBoard);
+      if (!isXNext) return;
+      const next = [...board];
+      next[index] = 'X';
+      setBoard(next);
       setIsXNext(false);
-      const gameWinner = checkWinner(nextBoard);
-      setWinner(gameWinner);
-      if (gameWinner === 'X') {
-        confetti({ particleCount: 100, spread: 60, origin: { y: 0.6 } });
-      }
-    }
-  };
-
-  const resetPvPBoard = async () => {
-    try {
-      await updateDoc(doc(db, 'caro_games', 'couple_caro'), {
-        board: Array(9).fill(null),
-        isXNext: true,
-        turn: ducEmail,
-        updatedAt: serverTimestamp()
-      });
-    } catch (e) {
-      console.error(e);
+      const w = checkWinner(next);
+      setWinner(w);
+      if (w === 'X') confetti({ particleCount: 100, spread: 60, origin: { y: 0.6 } });
     }
   };
 
   const handleRestart = () => {
-    if (isPvP) {
-      resetPvPBoard();
-    } else {
-      setBoard(Array(9).fill(null));
-      setIsXNext(true);
-      setWinner(null);
-    }
+    if (isPvP) { resetPvPBoard(); }
+    else { setBoard(Array(9).fill(null)); setIsXNext(true); setWinner(null); }
   };
 
+  const getName = (email) =>
+    profiles[email]?.display_name?.split(' ')[0] || email?.split('@')[0] || 'Bạn';
+
+  const switchToPvP = () => { setIsPvP(true); setWinner(null); };
+  const switchToAI = () => { setIsPvP(false); setBoard(Array(9).fill(null)); setIsXNext(true); setWinner(null); };
+
+  // ── Render ─────────────────────────────────────────────────────────────────
   return (
     <div className="flex flex-col items-center w-full max-w-sm mx-auto space-y-4 select-none relative font-display text-foreground">
-      {/* Game Mode Picker Tabs */}
+      {/* Mode tabs */}
       <div className="flex gap-2 w-full bg-white/5 border border-white/10 rounded-2xl p-1 shadow-inner">
         <button
-          onClick={() => { setIsPvP(false); setBoard(Array(9).fill(null)); setIsXNext(true); setWinner(null); }}
+          onClick={switchToAI}
           className={cn(
-            "flex-1 py-1.5 rounded-xl text-xs font-bold transition-all duration-200",
-            !isPvP ? "gradient-primary text-white shadow" : "text-muted-foreground hover:text-foreground"
+            'flex-1 py-1.5 rounded-xl text-xs font-bold transition-all duration-200',
+            !isPvP ? 'gradient-primary text-white shadow' : 'text-muted-foreground hover:text-foreground'
           )}
         >
           🤖 Đấu AI
         </button>
         <button
-          onClick={() => { setIsPvP(true); setWinner(null); }}
+          onClick={switchToPvP}
           className={cn(
-            "flex-1 py-1.5 rounded-xl text-xs font-bold transition-all duration-200",
-            isPvP ? "bg-cyan-500 text-white shadow" : "text-muted-foreground hover:text-foreground"
+            'flex-1 py-1.5 rounded-xl text-xs font-bold transition-all duration-200',
+            isPvP ? 'bg-cyan-500 text-white shadow' : 'text-muted-foreground hover:text-foreground'
           )}
         >
           👩‍❤️‍👨 Đấu Bạn Yêu
         </button>
       </div>
 
-      {/* Conditional Rendering for PvP Invitation flow */}
+      {/* PvP invitation flow */}
       {isPvP && (!dbGame || dbGame.status !== 'playing') ? (
         <div className="w-full liquid-glass rounded-3xl p-6 text-center space-y-5 border-none shadow-xl mt-4">
           <div className="w-14 h-14 rounded-full bg-cyan-500/20 flex items-center justify-center mx-auto text-2xl animate-pulse">
             ⚔️
           </div>
-          
+
+          {/* Partner picker */}
+          {friends.length > 0 && !dbGame && (
+            <div className="space-y-1 text-left">
+              <label className="text-[10px] text-muted-foreground uppercase font-bold">Chọn đối thủ:</label>
+              <select
+                value={partnerEmail}
+                onChange={e => setPartnerEmail(e.target.value)}
+                className="w-full bg-[#20151f] text-foreground text-xs rounded-xl border border-white/10 p-2 focus:outline-none focus:ring-1 focus:ring-primary"
+              >
+                {friends.map(email => (
+                  <option key={email} value={email}>{getName(email)}</option>
+                ))}
+              </select>
+            </div>
+          )}
+
           {dbGame?.status === 'inviting' ? (
-            dbGame.host_email === myEmailLower ? (
+            dbGame.host_email === myEmail ? (
               <div className="space-y-4">
-                <h3 className="font-bold text-sm">Đang chờ bạn yêu đồng ý ván cờ... ⏳</h3>
+                <h3 className="font-bold text-sm">Đang chờ {getName(partnerEmail)} đồng ý... ⏳</h3>
                 <p className="text-xs text-muted-foreground max-w-[220px] mx-auto leading-normal">
-                  Một thông báo mời đấu cờ Caro đã được gửi trực tiếp đến màn hình của bạn yêu.
+                  Thông báo mời đã được gửi đến màn hình của họ.
                 </p>
                 <button
                   onClick={cancelInvitation}
@@ -307,21 +363,12 @@ export default function Caro() {
               </div>
             ) : (
               <div className="space-y-4">
-                <h3 className="font-bold text-sm">Bạn yêu {dbGame.host_name} đang rủ bạn đấu cờ! ⚔️</h3>
-                <p className="text-xs text-muted-foreground max-w-[220px] mx-auto leading-normal">
-                  Hai người sẽ thi đấu Caro XO tay đôi trực tuyến thời gian thực.
-                </p>
+                <h3 className="font-bold text-sm">{getName(dbGame.host_email)} đang rủ bạn đấu cờ! ⚔️</h3>
                 <div className="flex gap-2">
-                  <button
-                    onClick={acceptInvitation}
-                    className="flex-1 py-2 rounded-2xl bg-cyan-500 text-white text-xs font-bold hover:bg-cyan-600 transition active:scale-95 shadow"
-                  >
+                  <button onClick={acceptInvitation} className="flex-1 py-2 rounded-2xl bg-cyan-500 text-white text-xs font-bold hover:bg-cyan-600 transition active:scale-95 shadow">
                     Đồng ý
                   </button>
-                  <button
-                    onClick={declineInvitation}
-                    className="flex-1 py-2 rounded-2xl bg-white/5 text-muted-foreground border border-white/10 hover:bg-white/10 text-xs font-semibold transition active:scale-95"
-                  >
+                  <button onClick={declineInvitation} className="flex-1 py-2 rounded-2xl bg-white/5 text-muted-foreground border border-white/10 hover:bg-white/10 text-xs font-semibold transition active:scale-95">
                     Bỏ qua
                   </button>
                 </div>
@@ -331,46 +378,47 @@ export default function Caro() {
             <div className="space-y-4">
               <h3 className="font-bold text-sm">Đấu cờ tay đôi trực tiếp 👩‍❤️‍👨</h3>
               <p className="text-xs text-muted-foreground max-w-[240px] mx-auto leading-normal">
-                Nhấn nút bên dưới để gửi lời mời bạn yêu tham gia trận đấu Caro trực tiếp real-time.
+                Bạn là <span className="font-bold text-primary">{pvpPlayerSymbol}</span>. Nhấn nút bên dưới để gửi lời mời.
               </p>
-              <button
-                onClick={sendInvitation}
-                className="w-full py-2.5 rounded-2xl bg-cyan-500 hover:bg-cyan-600 text-white text-xs font-bold transition active:scale-95 shadow-lg flex items-center justify-center gap-1.5"
-              >
-                Gửi lời mời bạn yêu <ArrowRight size={13} />
-              </button>
+              {friends.length === 0 ? (
+                <p className="text-xs text-muted-foreground">Hãy kết bạn trước để đấu PvP!</p>
+              ) : (
+                <button
+                  onClick={sendInvitation}
+                  className="w-full py-2.5 rounded-2xl bg-cyan-500 hover:bg-cyan-600 text-white text-xs font-bold transition active:scale-95 shadow-lg flex items-center justify-center gap-1.5"
+                >
+                  Gửi lời mời {getName(partnerEmail)} <ArrowRight size={13} />
+                </button>
+              )}
             </div>
           )}
         </div>
       ) : (
         <>
-          {/* Game Turn / Status Header */}
+          {/* Status bar */}
           <div className="w-full flex justify-between items-center liquid-glass px-4 py-2.5 rounded-2xl border-none shadow-md">
             <div className="flex items-center gap-1.5">
               <span className="text-lg">⚔️</span>
               <span className="text-xs font-bold text-muted-foreground">
-                {isPvP 
-                  ? pvpTurn === myEmailLower 
-                    ? "Lượt của bạn! 🫵" 
-                    : "Đối phương đang nghĩ... 🤔"
-                  : isXNext 
-                    ? "Đến lượt bạn (X)" 
-                    : "AI đang đi cờ..."}
+                {isPvP
+                  ? pvpTurn === myEmail
+                    ? 'Lượt của bạn! 🫵'
+                    : `${getName(partnerEmail)} đang nghĩ... 🤔`
+                  : isXNext
+                    ? 'Đến lượt bạn (X)'
+                    : 'AI đang đi cờ...'}
               </span>
             </div>
-
             {isPvP && (
               <span className="text-[10px] bg-cyan-500/20 text-cyan-400 border border-cyan-500/30 px-2 py-0.5 rounded-full font-bold">
-                Biểu tượng: {pvpPlayerSymbol}
+                Bạn: {pvpPlayerSymbol}
               </span>
             )}
           </div>
 
-          {/* 3x3 Caro Board Grid */}
+          {/* Board */}
           <div className="w-full aspect-square bg-[#1c1219]/95 border border-white/10 rounded-3xl p-4 grid grid-cols-3 grid-rows-3 gap-3 touch-action-none shadow-xl relative overflow-hidden">
-            {/* Neon decorative background lighting */}
             <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,rgba(168,85,247,0.05),transparent_60%)] pointer-events-none" />
-
             {board.map((cell, idx) => (
               <button
                 key={idx}
@@ -381,12 +429,7 @@ export default function Caro() {
                 {cell && (
                   <>
                     <div className="absolute inset-px rounded-xl bg-white/10 border-t border-l border-white/20 pointer-events-none" />
-                    <span
-                      className={cn(
-                        "select-none drop-shadow-md animate-scale-up",
-                        cell === 'X' ? "text-primary text-glow" : "text-cyan-400 text-glow-cyan"
-                      )}
-                    >
+                    <span className={cn('select-none drop-shadow-md', cell === 'X' ? 'text-primary text-glow' : 'text-cyan-400')}>
                       {cell}
                     </span>
                   </>
@@ -395,7 +438,7 @@ export default function Caro() {
             ))}
           </div>
 
-          {/* Reset button */}
+          {/* Reset */}
           <button
             onClick={handleRestart}
             className="flex items-center gap-1.5 px-6 py-2.5 rounded-2xl liquid-glass border-none hover:liquid-glow hover:text-primary text-muted-foreground text-xs font-bold transition active:scale-95 cursor-pointer"
@@ -403,16 +446,16 @@ export default function Caro() {
             <RefreshCw size={12} /> Làm mới bàn cờ
           </button>
 
-          {/* Winner / Draw Dialog Card overlay */}
+          {/* Winner overlay */}
           {winner && (
-            <div className="absolute inset-0 bg-[#181116]/80 backdrop-blur-md rounded-3xl z-[1000] flex flex-col items-center justify-center p-6 space-y-4 border border-white/10 animate-fade-in font-display">
+            <div className="absolute inset-0 bg-[#181116]/80 backdrop-blur-md rounded-3xl z-[1000] flex flex-col items-center justify-center p-6 space-y-4 border border-white/10 font-display">
               <span className="text-4xl">🏆</span>
               <h2 className="text-xl font-bold text-glow">
-                {winner === 'Draw' 
-                  ? "Kết quả: Hòa cờ! 🤝" 
-                  : isPvP 
-                    ? (winner === pvpPlayerSymbol ? "Bạn đã thắng bạn yêu! 🎉" : "Bạn yêu đã thắng bạn rồi! 🥺")
-                    : (winner === 'X' ? "Bạn đã chiến thắng AI! 🎉" : "AI đã chiến thắng bạn! 🤖")}
+                {winner === 'Draw'
+                  ? 'Kết quả: Hòa cờ! 🤝'
+                  : isPvP
+                    ? winner === pvpPlayerSymbol ? 'Bạn đã thắng! 🎉' : `${getName(partnerEmail)} đã thắng! 🥺`
+                    : winner === 'X' ? 'Bạn đã thắng AI! 🎉' : 'AI đã thắng bạn! 🤖'}
               </h2>
               <button
                 onClick={handleRestart}

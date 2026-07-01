@@ -9,11 +9,6 @@ import { cn } from '@/lib/utils';
 export default function WhackAPartner({ currentHighScores }) {
   const currentUser = auth.currentUser;
   const myEmailLower = currentUser?.email?.toLowerCase() || '';
-  
-  // Default fallback partner
-  const ducEmail = 'trongduc16012003@gmail.com';
-  const quynhEmail = 'maianhquynh123@gmail.com';
-  const partnerEmail = myEmailLower === ducEmail ? quynhEmail : ducEmail;
 
   // States
   const [profiles, setProfiles] = useState({});
@@ -33,61 +28,42 @@ export default function WhackAPartner({ currentHighScores }) {
   const popTimerRef = useRef(null);
   const gameTimerRef = useRef(null);
 
-  // 1. Fetch profiles to display names & photo URLs
+  // 1. Fetch own profile
   useEffect(() => {
-    const unsubDuc = onSnapshot(doc(db, 'user_profiles', ducEmail), (snap) => {
-      if (snap.exists()) setProfiles(prev => ({ ...prev, [ducEmail]: snap.data() }));
+    if (!myEmailLower) return;
+    const unsub = onSnapshot(doc(db, 'user_profiles', myEmailLower), snap => {
+      if (snap.exists()) setProfiles(prev => ({ ...prev, [myEmailLower]: snap.data() }));
     });
-    const unsubQuynh = onSnapshot(doc(db, 'user_profiles', quynhEmail), (snap) => {
-      if (snap.exists()) setProfiles(prev => ({ ...prev, [quynhEmail]: snap.data() }));
-    });
-
-    return () => {
-      unsubDuc();
-      unsubQuynh();
-    };
-  }, []);
+    return () => unsub();
+  }, [myEmailLower]);
 
   // 2. Load accepted friends list
   useEffect(() => {
     if (!myEmailLower) return;
-    const loadFriendsData = async () => {
+    const load = async () => {
       try {
         const q1 = query(collection(db, 'friends'), where('owner_email', '==', myEmailLower), where('status', '==', 'accepted'));
         const q2 = query(collection(db, 'friends'), where('friend_email', '==', myEmailLower), where('status', '==', 'accepted'));
-        
         const [snap1, snap2] = await Promise.all([getDocs(q1), getDocs(q2)]);
         const list = [];
-        snap1.forEach(doc => list.push(doc.data().friend_email));
-        snap2.forEach(doc => list.push(doc.data().owner_email));
-        
-        const unique = [...new Set(list)].filter(Boolean);
+        snap1.forEach(d => list.push(d.data().friend_email?.toLowerCase()));
+        snap2.forEach(d => list.push(d.data().owner_email?.toLowerCase()));
+        const unique = [...new Set(list.filter(Boolean))];
         setFriends(unique);
+        if (unique.length > 0) setSelectedFriend(unique[0]);
 
-        // Listen to profile updates of friends to show pictures/names
+        // Watch profiles of all friends
         unique.forEach(email => {
-          onSnapshot(doc(db, 'user_profiles', email), (snap) => {
-            if (snap.exists()) {
-              setProfiles(prev => ({ ...prev, [email]: snap.data() }));
-            }
+          onSnapshot(doc(db, 'user_profiles', email), snap => {
+            if (snap.exists()) setProfiles(prev => ({ ...prev, [email]: snap.data() }));
           });
         });
-
-        // Set default selection
-        if (unique.includes(partnerEmail)) {
-          setSelectedFriend(partnerEmail);
-        } else if (unique.length > 0) {
-          setSelectedFriend(unique[0]);
-        } else {
-          setSelectedFriend(partnerEmail); // fallback
-        }
       } catch (e) {
-        console.error("Error loading friends:", e);
-        setSelectedFriend(partnerEmail);
+        console.error('WhackAPartner: error loading friends', e);
       }
     };
-    loadFriendsData();
-  }, [myEmailLower, partnerEmail]);
+    load();
+  }, [myEmailLower]);
 
   // 3. Load high score
   useEffect(() => {
@@ -372,7 +348,7 @@ export default function WhackAPartner({ currentHighScores }) {
                   className="w-full bg-[#20151f] text-foreground text-xs rounded-xl border border-white/10 p-2 focus:outline-none focus:ring-1 focus:ring-primary"
                 >
                   {friends.length === 0 ? (
-                    <option value={partnerEmail}>{getFriendName(partnerEmail)} (Mặc định)</option>
+                    <option value="" disabled>Chưa có bạn bè — hãy kết bạn trước!</option>
                   ) : (
                     friends.map(email => (
                       <option key={email} value={email}>{getFriendName(email)}</option>
