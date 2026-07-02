@@ -248,10 +248,10 @@ export default function GlobalChat({ open, onClose, currentUser }) {
       <motion.div
         initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }}
         transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-        className="absolute top-16 bottom-0 left-0 right-0 w-full z-50 liquid-glass-heavy rounded-t-3xl border-t border-white/10 shadow-2xl flex flex-col overflow-hidden"
+        className="absolute top-16 bottom-0 left-0 right-0 w-full z-50 bg-background rounded-t-3xl border-t border-white/10 shadow-2xl flex flex-col overflow-hidden"
       >
         {/* Header */}
-        <div className="flex items-center gap-3 px-4 py-3.5 liquid-glass rim-light flex-shrink-0 rounded-none">
+        <div className="flex items-center gap-3 px-4 py-3.5 bg-white/5 border-b border-white/10 flex-shrink-0 rounded-none">
           <div className="w-8 h-8 rounded-full gradient-primary flex items-center justify-center">
             <MessageCircle size={15} className="text-white" />
           </div>

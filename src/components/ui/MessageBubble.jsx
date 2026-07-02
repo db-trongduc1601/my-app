@@ -135,7 +135,7 @@ const MessageBubbleComponent = ({
         status: 'active',
         updated_at: new Date()
       });
-      navigate('/entertainment');
+      navigate('/', { state: { openEntertainment: true, entertainmentTab: 'music' } });
     } catch(e) {
       console.error(e);
     }
@@ -213,7 +213,7 @@ const MessageBubbleComponent = ({
                 initial={{ opacity: 0, y: 10, scale: 0.9 }}
                 animate={{ opacity: 1, y: 0, scale: 1 }}
                 exit={{ opacity: 0, scale: 0.9 }}
-                className={cn('absolute z-50 flex gap-1 p-1.5 liquid-glass-heavy rim-light rounded-full shadow-xl -top-12', 
+                className={cn('absolute z-50 flex gap-1 p-1.5 bg-background border border-white/10 rounded-full shadow-xl -top-12',
                   isMe ? 'right-0' : 'left-0')}
               >
                 {EMOJIS.map(emoji => (

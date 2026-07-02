@@ -1,17 +1,63 @@
 import { useEffect, useState } from 'react';
+import { useLocation } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
 import { auth, db } from '../firebase'; // Nhập công cụ của chúng ta
-import { collection, query, orderBy, limit, onSnapshot, where } from 'firebase/firestore';
+import { collection, query, orderBy, limit, onSnapshot, where, getDocs } from 'firebase/firestore';
+import { motion, AnimatePresence } from 'framer-motion';
 import LocketCard from '@/components/home/LocketCard';
 import DualClock from '@/components/home/DualClock';
-import { Heart } from 'lucide-react';
+import MusicTab from '@/components/entertainment/MusicTab';
+import DateDecider from '@/components/entertainment/DateDecider';
+import { Heart, Music, MapPin, ChevronDown } from 'lucide-react';
+import { cn } from '@/lib/utils';
+
+const ENTERTAINMENT_SUBTABS = [
+  { key: 'music', icon: Music, label: 'Âm nhạc 🎵' },
+  { key: 'date', icon: MapPin, label: 'Đi chơi 📍' }
+];
 
 export default function Home() {
   // Lấy luôn thông tin user từ Firebase (vì qua cửa mới vào được đây)
   const currentUser = auth.currentUser;
-  
+  const location = useLocation();
+
   // Nơi chứa danh sách ảnh
   const [photos, setPhotos] = useState([]);
   const [acceptedEmails, setAcceptedEmails] = useState([]);
+
+  // Section Giải trí — thu/mở
+  const [entertainmentOpen, setEntertainmentOpen] = useState(false);
+  const [entertainmentTab, setEntertainmentTab] = useState('music');
+
+  // Tự mở section Giải trí khi được điều hướng tới từ lời mời nghe chung
+  useEffect(() => {
+    if (location.state?.openEntertainment) {
+      setEntertainmentOpen(true);
+      if (location.state?.entertainmentTab) setEntertainmentTab(location.state.entertainmentTab);
+    }
+  }, [location.state]);
+
+  const { data: tracks = [], refetch: refetchTracks } = useQuery({
+    queryKey: ['music'],
+    queryFn: async () => {
+      const querySnapshot = await getDocs(collection(db, 'music_tracks'));
+      return querySnapshot.docs
+        .map(doc => ({ id: doc.id, ...doc.data() }))
+        .sort((a, b) => (b.created_date || '').localeCompare(a.created_date || '')); // descending sort
+    },
+    enabled: entertainmentOpen,
+  });
+
+  const { data: spots = [], refetch: refetchSpots } = useQuery({
+    queryKey: ['datespots'],
+    queryFn: async () => {
+      const querySnapshot = await getDocs(collection(db, 'date_spots'));
+      return querySnapshot.docs
+        .map(doc => ({ id: doc.id, ...doc.data() }))
+        .sort((a, b) => (a.ten_dia_diem || '').localeCompare(b.ten_dia_diem || ''));
+    },
+    enabled: entertainmentOpen,
+  });
 
   // Kéo đường ống Real-time từ Firestore để lấy danh sách bạn bè đã đồng ý
   useEffect(() => {
@@ -44,8 +90,8 @@ export default function Home() {
   useEffect(() => {
     // Chỉ định vào đúng "ngăn tủ" tên là locket_photos, lấy 20 tấm mới nhất
     const q = query(
-      collection(db, 'locket_photos'), 
-      orderBy('createdAt', 'desc'), 
+      collection(db, 'locket_photos'),
+      orderBy('createdAt', 'desc'),
       limit(20)
     );
 
@@ -94,11 +140,54 @@ export default function Home() {
         allPhotos={filteredPhotos}
         onUploaded={handleDummyRefetch}
         onDeleted={handleDummyRefetch}
-        currentUser={currentUser} 
+        currentUser={currentUser}
       />
 
       {/* Dual Clock (Giữ nguyên) */}
       <DualClock />
+
+      {/* Section Giải Trí — thu/mở */}
+      <div className="liquid-glass rounded-2xl overflow-hidden">
+        <button
+          onClick={() => setEntertainmentOpen(v => !v)}
+          className="w-full flex items-center justify-between px-4 py-3.5"
+        >
+          <span className="font-display text-base font-semibold text-foreground">Giải Trí 🎉</span>
+          <ChevronDown
+            size={18}
+            className={cn("text-muted-foreground transition-transform duration-300", entertainmentOpen && "rotate-180")}
+          />
+        </button>
+
+        <AnimatePresence initial={false}>
+          {entertainmentOpen && (
+            <motion.div
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: 'auto', opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              transition={{ duration: 0.3, ease: 'easeInOut' }}
+              className="overflow-hidden"
+            >
+              <div className="px-4 pb-4 space-y-4">
+                {/* Sub-tabs */}
+                <div className="flex gap-2 liquid-glass rounded-2xl p-1">
+                  {ENTERTAINMENT_SUBTABS.map(({ key, label }) =>
+                    <button key={key} onClick={() => setEntertainmentTab(key)}
+                      className={cn("flex-1 py-2 rounded-xl text-sm font-semibold transition-all",
+                        entertainmentTab === key ? "liquid-glass shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground")}
+                    >
+                      {label}
+                    </button>
+                  )}
+                </div>
+
+                {entertainmentTab === 'music' && <MusicTab tracks={tracks} onRefresh={refetchTracks} />}
+                {entertainmentTab === 'date' && <DateDecider spots={spots} onRefresh={refetchSpots} />}
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
     </div>
   );
 }

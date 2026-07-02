@@ -1,0 +1,128 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    // Chỉ 2 email của Đức & Quỳnh được coi là "chủ sở hữu" app.
+    function isOwner() {
+      return isSignedIn() && request.auth.token.email in [
+        'db.trongduc1601@gmail.com',
+        'nguyenquynh092007@gmail.com'
+      ];
+    }
+
+    // ── Hồ sơ người dùng — đọc chung, mỗi người chỉ sửa hồ sơ của chính mình ──
+    match /user_profiles/{profileId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && request.resource.data.email == request.auth.token.email;
+      allow update: if isSignedIn() && resource.data.email == request.auth.token.email;
+      allow delete: if false;
+    }
+
+    // ── Bạn bè — chỉ 2 người trong bản ghi được đọc/sửa/xoá ──────────────────
+    match /friends/{friendId} {
+      allow read: if isSignedIn() &&
+        request.auth.token.email in [resource.data.owner_email, resource.data.friend_email];
+      allow create: if isSignedIn() && request.resource.data.owner_email == request.auth.token.email;
+      allow update, delete: if isSignedIn() &&
+        request.auth.token.email in [resource.data.owner_email, resource.data.friend_email];
+    }
+
+    // ── Chat riêng & Chat chung — chỉ người gửi/nhận (hoặc chat "global") ────
+    match /messages/{messageId} {
+      allow read: if isSignedIn() && (
+        request.auth.token.email in [resource.data.sender_email, resource.data.receiver_email] ||
+        resource.data.receiver_email == 'global'
+      );
+      allow create: if isSignedIn() && request.resource.data.sender_email == request.auth.token.email;
+      allow update: if isSignedIn() && (
+        request.auth.token.email in [resource.data.sender_email, resource.data.receiver_email] ||
+        resource.data.receiver_email == 'global'
+      ) &&
+        request.resource.data.sender_email == resource.data.sender_email &&
+        request.resource.data.receiver_email == resource.data.receiver_email;
+      allow delete: if false;
+    }
+
+    // ── Trạng thái "đang gõ" — ai cũng đọc được, chỉ tự ghi trạng thái của mình ──
+    match /typing_status/{statusId} {
+      allow read: if isSignedIn();
+      allow create, update: if isSignedIn() && request.resource.data.userEmail == request.auth.token.email;
+      allow delete: if isSignedIn() && resource.data.userEmail == request.auth.token.email;
+    }
+
+    // ── FCM push token — mỗi người chỉ ghi token của chính mình ──────────────
+    match /fcm_tokens/{email} {
+      allow read: if false;
+      allow write: if isSignedIn() && request.auth.token.email == email;
+    }
+
+    // ── Locket / Games / Music / DateSpots / Food — đọc chung, chỉ Đức & Quỳnh ghi ──
+    match /locket_photos/{photoId} {
+      allow read: if isSignedIn();
+      allow write: if isOwner();
+    }
+
+    // Đấu Caro thời gian thực — mở cho bất kỳ user nào là host/đối phương thật sự
+    // trong ván đấu đó (để bạn bè khác vẫn đấu được, không chỉ riêng Đức & Quỳnh).
+    match /caro_games/{gameId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && request.resource.data.host_email == request.auth.token.email;
+      allow update: if isSignedIn() &&
+        request.auth.token.email in [resource.data.host_email, resource.data.receiver_email];
+      allow delete: if false;
+    }
+
+    match /game_high_scores/{gameId} {
+      allow read: if isSignedIn();
+      allow write: if isOwner();
+    }
+
+    match /music_tracks/{trackId} {
+      allow read: if isSignedIn();
+      allow write: if isOwner();
+    }
+
+    // Nghe nhạc chung thời gian thực — mở cho host/khách thật sự trong phiên đó.
+    match /listening_sessions/{sessionId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && request.resource.data.host_email == request.auth.token.email;
+      allow update: if isSignedIn() &&
+        request.auth.token.email in [resource.data.host_email, resource.data.participant_email];
+      allow delete: if false;
+    }
+
+    match /date_spots/{spotId} {
+      allow read: if isSignedIn();
+      allow write: if isOwner();
+    }
+
+    match /foods/{foodId} {
+      allow read: if isSignedIn();
+      allow write: if isOwner();
+    }
+
+    // ── Bản đồ tình yêu — dữ liệu vị trí & kỷ niệm riêng tư, chỉ Đức & Quỳnh ──
+    match /love_journeys/{journeyId} {
+      allow read, write: if isOwner();
+    }
+
+    match /love_memories/{memoryId} {
+      allow read, write: if isOwner();
+    }
+
+    match /user_locations/{email} {
+      allow read: if isOwner();
+      allow write: if isOwner() && request.auth.token.email == email;
+    }
+
+    // ── Mặc định: chặn hết những gì không được khai báo ở trên ───────────────
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

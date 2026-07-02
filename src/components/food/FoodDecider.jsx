@@ -200,7 +200,7 @@ function LuckyWheel({ foods }) {
             initial={{ opacity: 0, scale: 0.8, y: 20 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0 }}
-            className="w-full liquid-glass rounded-2xl p-4 space-y-3"
+            className="w-full bg-white/5 border border-white/10 rounded-2xl p-4 space-y-3"
           >
             <p className="text-xs font-semibold text-muted-foreground uppercase tracking-widest text-center">🎉 Số phận đã chọn!</p>
             <div className="flex gap-3 items-center">
@@ -214,7 +214,7 @@ function LuckyWheel({ foods }) {
                 {winnerFood.gia_uoc_tinh && <div className="flex items-center gap-1.5 text-xs text-muted-foreground"><DollarSign size={11}/>{winnerFood.gia_uoc_tinh}</div>}
                 <div className="flex gap-1.5 mt-1.5 flex-wrap">
                   {[winnerFood.nhiet_do, winnerFood.kieu_an, winnerFood.quoc_tich].filter(Boolean).map(v => (
-                    <span key={v} className="text-[10px] px-2 py-0.5 rounded-full liquid-glass-sm">{v}</span>
+                    <span key={v} className="text-[10px] px-2 py-0.5 rounded-full bg-white/5 border border-white/10">{v}</span>
                   ))}
                 </div>
               </div>
@@ -232,8 +232,8 @@ const FilterBtn = ({ active, onClick, emoji, label }) => (
     className={cn(
       "flex-1 flex flex-col items-center gap-1 py-2.5 rounded-2xl border-2 transition-all duration-200 text-xs font-medium",
       active
-        ? "border-primary gradient-primary text-primary-foreground liquid-glow scale-105"
-        : "border-transparent liquid-glass-sm text-muted-foreground hover:liquid-glow hover:border-primary/30"
+        ? "border-primary gradient-primary text-primary-foreground shadow-md scale-105"
+        : "bg-white/5 border-white/10 text-muted-foreground hover:border-primary/30"
     )}>
     <span className="text-lg">{emoji}</span>
     {label}
@@ -259,7 +259,7 @@ function RoundEditor({ roundLabel, options, onSave, onClose }) {
 
   return (
     <Dialog open onOpenChange={onClose}>
-      <DialogContent className="max-w-sm rounded-2xl liquid-glass">
+      <DialogContent className="max-w-sm rounded-2xl bg-background border border-white/10">
         <p className="font-semibold text-base mb-3">Chỉnh sửa: {roundLabel}</p>
         <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
           {items.map((it, idx) => (
@@ -311,7 +311,7 @@ function FoodEditModal({ food, open, onClose, onSave }) {
   };
   return (
     <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className="max-w-sm rounded-2xl liquid-glass">
+      <DialogContent className="max-w-sm rounded-2xl bg-background border border-white/10">
         <p className="font-semibold text-base mb-3">Chỉnh sửa món</p>
         <div className="space-y-2">
           <Input placeholder="Tên món *" value={form.ten_mon} onChange={e => setForm(f => ({...f, ten_mon: e.target.value}))} />
@@ -361,7 +361,7 @@ function FoodDetailModal({ food, open, onClose, onConfirm }) {
   };
   return (
     <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className="max-w-sm rounded-2xl p-0 overflow-hidden border-0 liquid-glass">
+      <DialogContent className="max-w-sm rounded-2xl p-0 overflow-hidden border border-white/10 bg-background">
         {food.anh
           ? <img src={food.anh} alt={food.ten_mon} className="w-full h-48 object-cover" />
           : <div className="w-full h-32 gradient-rose flex items-center justify-center text-5xl">🍜</div>
@@ -374,7 +374,7 @@ function FoodDetailModal({ food, open, onClose, onConfirm }) {
           </div>
           <div className="flex gap-2 flex-wrap">
             {[food.nhiet_do, food.loai_no, food.kieu_an, food.quoc_tich, food.khoang_cach, food.ngan_sach].filter(Boolean).map(v => (
-              <span key={v} className="text-xs px-2 py-1 rounded-full liquid-glass-sm">{v}</span>
+              <span key={v} className="text-xs px-2 py-1 rounded-full bg-white/5 border border-white/10">{v}</span>
             ))}
           </div>
           <Button onClick={handleConfirm} disabled={confirming || food.chot_don}
@@ -449,7 +449,7 @@ export default function FoodDecider({ foods, onConfirm, onRefresh }) {
   return (
     <div className="space-y-5">
       {/* Tab switcher */}
-      <div className="flex gap-2 liquid-glass-sm p-1 rounded-2xl">
+      <div className="flex gap-2 bg-white/5 border border-white/10 p-1 rounded-2xl">
         <button
           onClick={() => setView('filter')}
           className={cn(
@@ -484,7 +484,7 @@ export default function FoodDecider({ foods, onConfirm, onRefresh }) {
                 <div className="flex gap-2 overflow-x-auto pb-1 no-scrollbar">
                   {chosen.map(food => (
                     <div key={food.id}
-                      className="flex-shrink-0 w-32 liquid-glass liquid-glass-interactive rounded-2xl p-2 space-y-1.5 cursor-pointer hover:scale-105 transition-transform"
+                      className="flex-shrink-0 w-32 bg-white/5 border border-white/10 rounded-2xl p-2 space-y-1.5 cursor-pointer hover:scale-105 transition-transform"
                       onClick={() => setSelected(food)}>
                       {food.anh
                         ? <img src={food.anh} alt={food.ten_mon} className="w-full h-20 rounded-xl object-cover" />
@@ -543,7 +543,7 @@ export default function FoodDecider({ foods, onConfirm, onRefresh }) {
                   </motion.div>
                 ) : filtered.map(food => (
                   <motion.div key={food.id} layout initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95 }}
-                    className="liquid-glass liquid-glass-interactive rounded-2xl p-3 flex items-center gap-3 cursor-pointer"
+                    className="bg-white/5 border border-white/10 rounded-2xl p-3 flex items-center gap-3 cursor-pointer"
                     onClick={() => setSelected(food)}>
                     {food.anh
                       ? <img src={food.anh} alt={food.ten_mon} className="w-14 h-14 rounded-xl object-cover flex-shrink-0" />
@@ -553,7 +553,7 @@ export default function FoodDecider({ foods, onConfirm, onRefresh }) {
                       <p className="font-semibold text-sm truncate">{food.ten_mon}</p>
                       <div className="flex gap-1.5 mt-1 flex-wrap">
                         {[food.nhiet_do, food.kieu_an, food.quoc_tich].filter(Boolean).map(v => (
-                          <span key={v} className="text-xs px-2 py-0.5 rounded-full liquid-glass-sm text-secondary-foreground">{v}</span>
+                          <span key={v} className="text-xs px-2 py-0.5 rounded-full bg-white/5 border border-white/10 text-secondary-foreground">{v}</span>
                         ))}
                       </div>
                     </div>

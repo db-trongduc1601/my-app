@@ -3,11 +3,8 @@ import { db, auth } from '../firebase';
 import { doc, onSnapshot, collection, query, where, getDocs } from 'firebase/firestore';
 import { Gamepad2, Trophy, ArrowLeft } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import BlockBlast from '../components/games/BlockBlast';
 import Love2048 from '../components/games/Love2048';
 import Caro from '../components/games/Caro';
-import FlappyHeart from '../components/games/FlappyHeart';
-import WhackAPartner from '../components/games/WhackAPartner';
 
 // ─── Shared back-button wrapper with click/tap animation ─────────────────────
 function GameScreen({ onBack, children }) {
@@ -106,10 +103,7 @@ export default function Games() {
   const [profiles, setProfiles] = useState({});
   const [participantEmails, setParticipantEmails] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [blockBlastScores, setBlockBlastScores] = useState({});
   const [love2048Scores, setLove2048Scores] = useState({});
-  const [flappyHeartScores, setFlappyHeartScores] = useState({});
-  const [whackAPartnerScores, setWhackAPartnerScores] = useState({});
 
   // 1. Load accepted friends list → build participant email set
   useEffect(() => {
@@ -144,20 +138,12 @@ export default function Games() {
     return () => unsubs.forEach(u => u());
   }, [participantEmails]);
 
-  // 3. Watch all four high-score docs
+  // 3. Watch the Love 2048 high-score doc
   useEffect(() => {
-    const games = [
-      ['block_blast', setBlockBlastScores],
-      ['love_2048', setLove2048Scores],
-      ['flappy_heart', setFlappyHeartScores],
-      ['whack_a_partner', setWhackAPartnerScores],
-    ];
-    const unsubs = games.map(([id, setter]) =>
-      onSnapshot(doc(db, 'game_high_scores', id), snap => {
-        if (snap.exists()) setter(snap.data().scores || {});
-      })
-    );
-    return () => unsubs.forEach(u => u());
+    const unsub = onSnapshot(doc(db, 'game_high_scores', 'love_2048'), snap => {
+      if (snap.exists()) setLove2048Scores(snap.data().scores || {});
+    });
+    return () => unsub();
   }, []);
 
   // Filter score maps to only include participants we know
@@ -167,26 +153,11 @@ export default function Games() {
     );
 
   const gameComponents = {
-    block_blast: <BlockBlast currentHighScores={blockBlastScores} />,
     love_2048: <Love2048 currentHighScores={love2048Scores} />,
     caro: <Caro />,
-    flappy_heart: <FlappyHeart currentHighScores={flappyHeartScores} />,
-    whack_a_partner: <WhackAPartner currentHighScores={whackAPartnerScores} />,
   };
 
   const GAME_CARDS = [
-    {
-      key: 'block_blast',
-      emoji: '🧩',
-      title: 'Block Blast',
-      subtitle: 'Xếp gỗ tình yêu',
-      desc: 'Kéo thả các khối hình gỗ xinh xắn vào ma trận 8x8. Xóa hàng hoặc cột đầy để tính điểm combo cực cao!',
-      difficulty: 'Vừa',
-      diffColor: 'bg-pink-100 text-pink-700',
-      btnClass: 'gradient-primary',
-      scores: blockBlastScores,
-      showScores: true,
-    },
     {
       key: 'love_2048',
       emoji: '🔢',
@@ -210,30 +181,6 @@ export default function Games() {
       btnClass: 'bg-purple-500 hover:bg-purple-600',
       scores: null,
       showScores: false,
-    },
-    {
-      key: 'flappy_heart',
-      emoji: '🎈',
-      title: 'Flappy Heart',
-      subtitle: 'Nhảy vượt chướng ngại',
-      desc: 'Nhấp bay lượn lách trái tim hồng vượt qua các kẹo bông chướng ngại. Đạt điểm số kỷ lục bay xa nhất!',
-      difficulty: 'Cao',
-      diffColor: 'bg-red-100 text-red-700',
-      btnClass: 'bg-rose-500 hover:bg-rose-600',
-      scores: flappyHeartScores,
-      showScores: true,
-    },
-    {
-      key: 'whack_a_partner',
-      emoji: '🔨',
-      title: 'Đập Avatar',
-      subtitle: 'Trêu ghẹo bạn yêu',
-      desc: 'Trêu ghẹo đối phương cực xả stress! Đập thật nhanh vào avatar đối phương chui lên từ hố kính, tránh đập mình nhé!',
-      difficulty: 'Vừa',
-      diffColor: 'bg-orange-100 text-orange-700',
-      btnClass: 'bg-orange-500 hover:bg-orange-600',
-      scores: whackAPartnerScores,
-      showScores: true,
     },
   ];
 
@@ -276,7 +223,7 @@ export default function Games() {
             {/* Game cards grid or Skeletons */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pb-8">
               {loading ? (
-                Array(5).fill(0).map((_, i) => <GameCardSkeleton key={i} />)
+                Array(2).fill(0).map((_, i) => <GameCardSkeleton key={i} />)
               ) : (
                 GAME_CARDS.map(({ key, emoji, title, subtitle, desc, difficulty, diffColor, btnClass, scores, showScores }, index) => (
                   <motion.div

@@ -37,6 +37,21 @@ export default function FriendsSidebar({ open, onClose, currentUser }) {
 
   const myCode = currentUser ? generateFriendCode(currentUser.email) : '';
 
+  // Đồng bộ danh sách bạn bè đã chấp nhận vào map accepted_friend_emails trên
+  // hồ sơ (user_profiles) của chính mình — dùng cho Firestore security rules.
+  const syncAcceptedFriendEmails = async (emailsList) => {
+    if (!currentUser?.email) return;
+    try {
+      const q = query(collection(db, 'user_profiles'), where('email', '==', currentUser.email));
+      const snap = await getDocs(q);
+      if (snap.empty) return;
+      const map = Object.fromEntries(emailsList.filter(Boolean).map(e => [e.toLowerCase(), true]));
+      await updateDoc(doc(db, 'user_profiles', snap.docs[0].id), { accepted_friend_emails: map });
+    } catch (error) {
+      console.error("Lỗi đồng bộ accepted_friend_emails:", error);
+    }
+  };
+
   const loadData = async () => {
     if (!currentUser) return;
 
@@ -63,6 +78,9 @@ export default function FriendsSidebar({ open, onClose, currentUser }) {
         return true;
       });
       setFriends(deduped);
+
+      const acceptedEmails = deduped.map(r => r.owner_email === myEmail ? r.friend_email : r.owner_email);
+      syncAcceptedFriendEmails(acceptedEmails);
 
       // Pending incoming: friend_email === me, status=pending
       const incoming = allRecords.filter(r => r.friend_email === myEmail && r.status === 'pending');
@@ -310,8 +328,8 @@ export default function FriendsSidebar({ open, onClose, currentUser }) {
         initial={{ x: '-100%' }} animate={{ x: 0 }} exit={{ x: '-100%' }}
         transition={{ type: 'spring', damping: 25, stiffness: 200 }}
         className={chatFriend ?
-          'absolute top-16 bottom-0 left-0 right-0 w-full z-50 liquid-glass-heavy rounded-t-3xl border-t border-white/10 shadow-2xl flex flex-col overflow-hidden' :
-          'absolute top-0 left-0 h-full w-80 max-w-[85%] z-50 liquid-glass-heavy border-r border-border shadow-2xl flex flex-col'
+          'absolute top-16 bottom-0 left-0 right-0 w-full z-50 bg-background rounded-t-3xl border-t border-white/10 shadow-2xl flex flex-col overflow-hidden' :
+          'absolute top-0 left-0 h-full w-80 max-w-[85%] z-50 bg-background border-r border-border shadow-2xl flex flex-col'
         }
       >
         <AnimatePresence mode="wait">
@@ -322,7 +340,7 @@ export default function FriendsSidebar({ open, onClose, currentUser }) {
           ) : (
             <motion.div key="list" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex flex-col h-full">
               {/* Header */}
-              <div className="flex items-center justify-between px-4 py-4 border-b border-border liquid-glass rim-light">
+              <div className="flex items-center justify-between px-4 py-4 border-b border-border bg-white/5">
                 <span className="font-display font-semibold text-lg">Bạn bè 👥</span>
                 <button onClick={onClose} className="p-1 rounded-full hover:bg-white/20 transition-colors">
                   <X size={16} />
@@ -331,10 +349,10 @@ export default function FriendsSidebar({ open, onClose, currentUser }) {
 
               <div className="flex-1 overflow-y-auto px-4 py-4 space-y-5 min-h-0">
                 {/* My code */}
-                <div className="liquid-glass rounded-2xl p-4 space-y-2">
+                <div className="bg-white/5 border border-white/10 rounded-2xl p-4 space-y-2">
                   <p className="text-xs font-semibold text-muted-foreground uppercase tracking-widest">Mã kết bạn của bạn</p>
                   <div className="flex items-center gap-2">
-                    <div className="flex-1 liquid-glass-sm rounded-xl px-3 py-2 font-mono text-lg font-bold tracking-widest text-center text-primary">
+                    <div className="flex-1 bg-white/5 border border-white/10 rounded-xl px-3 py-2 font-mono text-lg font-bold tracking-widest text-center text-primary">
                       {myCode}
                     </div>
                     <button onClick={handleCopy}
@@ -373,7 +391,7 @@ export default function FriendsSidebar({ open, onClose, currentUser }) {
                     {pendingIn.map(r => {
                       const name = (r.owner_email || 'Ẩn danh').split('@')[0];
                       return (
-                        <div key={r.id} className="liquid-glass liquid-glass-interactive rounded-2xl p-3 space-y-2">
+                        <div key={r.id} className="bg-white/5 border border-white/10 rounded-2xl p-3 space-y-2">
                           <div className="flex items-center gap-2">
                             <div className="w-8 h-8 rounded-full bg-yellow-100 dark:bg-yellow-900/30 flex items-center justify-center text-sm font-bold text-yellow-700 dark:text-yellow-400 flex-shrink-0">
                               {name[0]?.toUpperCase()}
@@ -389,7 +407,7 @@ export default function FriendsSidebar({ open, onClose, currentUser }) {
                               <UserCheck size={13} /> Chấp nhận
                             </button>
                             <button onClick={() => handleReject(r)}
-                              className="flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-xl liquid-glass-sm text-muted-foreground text-xs font-semibold hover:bg-destructive/10 hover:text-destructive transition-colors">
+                              className="flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-xl bg-white/5 border border-white/10 text-muted-foreground text-xs font-semibold hover:bg-destructive/10 hover:text-destructive transition-colors">
                               <UserX size={13} /> Từ chối
                             </button>
                           </div>
@@ -408,8 +426,8 @@ export default function FriendsSidebar({ open, onClose, currentUser }) {
                     {pendingOut.map(r => {
                       const name = (r.friend_email || 'Ẩn danh').split('@')[0];
                       return (
-                        <div key={r.id} className="liquid-glass liquid-glass-interactive rounded-2xl p-3 flex items-center gap-3">
-                          <div className="w-8 h-8 rounded-full liquid-glass-sm flex items-center justify-center text-sm font-bold text-muted-foreground flex-shrink-0">
+                        <div key={r.id} className="bg-white/5 border border-white/10 rounded-2xl p-3 flex items-center gap-3">
+                          <div className="w-8 h-8 rounded-full bg-white/5 border border-white/10 flex items-center justify-center text-sm font-bold text-muted-foreground flex-shrink-0">
                             {name[0]?.toUpperCase()}
                           </div>
                           <div className="flex-1 min-w-0">
@@ -457,7 +475,7 @@ export default function FriendsSidebar({ open, onClose, currentUser }) {
                     const unreadCount = unreadCountBySender?.[f.email?.toLowerCase()] || 0;
 
                     return (
-                      <div key={r.id} className="liquid-glass liquid-glass-interactive rounded-2xl p-3 space-y-2">
+                      <div key={r.id} className="bg-white/5 border border-white/10 rounded-2xl p-3 space-y-2">
                         <div className="flex items-center gap-3">
                           <div className="relative w-9 h-9 flex-shrink-0">
                             {f.photoUrl ? (

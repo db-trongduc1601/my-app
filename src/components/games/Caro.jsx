@@ -12,6 +12,14 @@ import { motion } from 'framer-motion';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
+function fireWinConfetti() {
+  const colors = ['#f43f8f', '#c084fc', '#facc15', '#22d3ee'];
+  confetti({ particleCount: 120, spread: 70, origin: { y: 0.55 }, colors });
+  setTimeout(() => {
+    confetti({ particleCount: 60, spread: 100, origin: { y: 0.5 }, colors, scalar: 0.8 });
+  }, 200);
+}
+
 const WINNING_COMBOS = [
   [0, 1, 2], [3, 4, 5], [6, 7, 8],
   [0, 3, 6], [1, 4, 7], [2, 5, 8],
@@ -128,7 +136,7 @@ export default function Caro() {
           const iWon = w === pvpPlayerSymbol;
           if (iWon && !firedConfettiRef.current) {
             firedConfettiRef.current = true;
-            confetti({ particleCount: 100, spread: 60, origin: { y: 0.6 } });
+            fireWinConfetti();
           }
         }
       } else {
@@ -290,7 +298,7 @@ export default function Caro() {
       setIsXNext(false);
       const w = checkWinner(next);
       setWinner(w);
-      if (w === 'X') confetti({ particleCount: 100, spread: 60, origin: { y: 0.6 } });
+      if (w === 'X') fireWinConfetti();
     }
   };
 
@@ -305,6 +313,12 @@ export default function Caro() {
 
   const switchToPvP = () => { setIsPvP(true); setWinner(null); };
   const switchToAI = () => { setIsPvP(false); setBoard(Array(9).fill(null)); setIsXNext(true); setWinner(null); };
+
+  // ── Outcome for the current player: 'win' | 'lose' | 'draw' | null ─────────
+  const outcome = !winner ? null
+    : winner === 'Draw' ? 'draw'
+    : (isPvP ? winner === pvpPlayerSymbol : winner === 'X') ? 'win'
+    : 'lose';
 
   // ── Render ─────────────────────────────────────────────────────────────────
   return (
@@ -404,7 +418,7 @@ export default function Caro() {
         <>
           {/* Status bar */}
           <motion.div
-            animate={winner && winner !== 'Draw' && winner !== pvpPlayerSymbol ? {
+            animate={outcome === 'lose' ? {
               x: [0, -4, 4, -4, 4, -2, 2, 0],
               opacity: 0.65
             } : {}}
@@ -466,17 +480,43 @@ export default function Caro() {
             <RefreshCw size={12} /> Làm mới bàn cờ
           </button>
 
-          {/* Winner overlay */}
+          {/* Winner overlay — distinct treatment for win / lose / draw */}
           {winner && (
-            <div className="absolute inset-0 bg-[#181116]/80 backdrop-blur-md rounded-3xl z-[1000] flex flex-col items-center justify-center p-6 space-y-4 border border-white/10 font-display">
+            <div className={cn(
+              "absolute inset-0 backdrop-blur-md rounded-3xl z-[1000] flex flex-col items-center justify-center p-6 space-y-4 border font-display",
+              outcome === 'win' && "bg-[#181116]/75 border-yellow-400/30",
+              outcome === 'lose' && "bg-[#181116]/85 border-white/5",
+              outcome === 'draw' && "bg-[#181116]/80 border-white/10"
+            )}>
               <motion.div
-                initial={{ scale: 0.5, opacity: 0 }}
-                animate={{ scale: 1, opacity: 1 }}
-                transition={{ duration: 0.3, ease: "easeOut" }}
+                initial={outcome === 'win'
+                  ? { scale: 0.3, opacity: 0, rotate: -8 }
+                  : outcome === 'lose'
+                    ? { y: -10, opacity: 0 }
+                    : { scale: 0.7, opacity: 0 }}
+                animate={outcome === 'win'
+                  ? { scale: [0.3, 1.15, 1], opacity: 1, rotate: 0 }
+                  : outcome === 'lose'
+                    ? { y: 0, opacity: 1 }
+                    : { scale: 1, opacity: 1 }}
+                transition={outcome === 'win'
+                  ? { duration: 0.5, ease: "easeOut" }
+                  : { duration: 0.35, ease: "easeOut" }}
                 className="flex flex-col items-center space-y-4"
               >
-                <span className="text-4xl">🏆</span>
-                <h2 className="text-xl font-bold text-glow">
+                <motion.span
+                  className="text-4xl"
+                  animate={outcome === 'win' ? { y: [0, -6, 0] } : outcome === 'lose' ? { rotate: [-4, 4, -4, 0] } : {}}
+                  transition={outcome === 'win' ? { duration: 1.1, repeat: Infinity, ease: "easeInOut" } : { duration: 0.5 }}
+                >
+                  {outcome === 'win' ? '🏆' : outcome === 'lose' ? '💔' : '🤝'}
+                </motion.span>
+                <h2 className={cn(
+                  "text-xl font-bold",
+                  outcome === 'win' && "text-yellow-300 text-glow",
+                  outcome === 'lose' && "text-muted-foreground",
+                  outcome === 'draw' && "text-foreground"
+                )}>
                   {winner === 'Draw'
                     ? 'Kết quả: Hòa cờ! 🤝'
                     : isPvP
@@ -486,7 +526,10 @@ export default function Caro() {
               </motion.div>
               <button
                 onClick={handleRestart}
-                className="flex items-center gap-1.5 px-6 py-2.5 rounded-2xl gradient-primary text-white text-xs font-bold shadow-lg transition hover:scale-105 active:scale-95 cursor-pointer"
+                className={cn(
+                  "flex items-center gap-1.5 px-6 py-2.5 rounded-2xl text-white text-xs font-bold shadow-lg transition hover:scale-105 active:scale-95 cursor-pointer",
+                  outcome === 'win' ? "gradient-primary" : "bg-white/10 hover:bg-white/15"
+                )}
               >
                 <RefreshCw size={12} /> Chơi lại
               </button>

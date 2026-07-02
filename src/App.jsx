@@ -6,6 +6,7 @@ import PageNotFound from './lib/PageNotFound';
 import { AuthProvider, useAuth } from '@/lib/AuthContext';
 import UserNotRegisteredError from '@/components/UserNotRegisteredError';
 import { ThemeProvider } from '@/lib/ThemeContext';
+import ErrorBoundary from '@/components/ErrorBoundary';
 import Layout from '@/components/Layout';
 import Home from '@/pages/Home';
 import { useState, useEffect, lazy, Suspense } from 'react';
@@ -17,7 +18,6 @@ import { useNotifications } from '@/hooks/useNotifications';
 const Food = lazy(() => import('@/pages/Food'));
 const Games = lazy(() => import('@/pages/Games'));
 const LoveMap = lazy(() => import('@/pages/LoveMap'));
-const Entertainment = lazy(() => import('@/pages/Entertainment'));
 
 const AuthenticatedApp = () => {
   const { user, isLoadingAuth, isLoadingPublicSettings, authError, navigateToLogin } = useAuth();
@@ -48,7 +48,6 @@ const AuthenticatedApp = () => {
           <Route path="/food" element={<Food />} />
           <Route path="/games" element={<Games />} />
           <Route path="/lovemap" element={<LoveMap />} />
-          <Route path="/entertainment" element={<Entertainment />} />
         </Route>
         <Route path="*" element={<PageNotFound />} />
       </Routes>
@@ -84,16 +83,18 @@ function App() {
   }
 
   return (
-    <ThemeProvider>
-      <AuthProvider>
-        <QueryClientProvider client={queryClientInstance}>
-          <Router>
-            <AuthenticatedApp />
-          </Router>
-          <Toaster />
-        </QueryClientProvider>
-      </AuthProvider>
-    </ThemeProvider>
+    <ErrorBoundary>
+      <ThemeProvider>
+        <AuthProvider>
+          <QueryClientProvider client={queryClientInstance}>
+            <Router>
+              <AuthenticatedApp />
+            </Router>
+            <Toaster />
+          </QueryClientProvider>
+        </AuthProvider>
+      </ThemeProvider>
+    </ErrorBoundary>
   );
 }
 

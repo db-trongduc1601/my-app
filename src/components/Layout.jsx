@@ -4,6 +4,7 @@ import { MessageCircle, Users } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import TopBar from '@/components/TopBar';
 import BottomNav from '@/components/BottomNav';
+import ErrorBoundary from '@/components/ErrorBoundary';
 import GlobalChat from '@/components/GlobalChat';
 import FriendsSidebar from '@/components/friends/FriendsSidebar';
 import ProfileEditorModal from '@/components/profile/ProfileEditorModal';
@@ -251,7 +252,9 @@ export default function Layout() {
       {/* Page content — will-change promotes this to its own GPU layer,
           keeping scroll independent from the fixed tabbar's backdrop-filter */}
       <main className="flex-1 overflow-y-auto pb-28 relative z-10 scroll-smooth" style={{ WebkitOverflowScrolling: 'touch', willChange: 'transform' }}>
-        <Outlet />
+        <ErrorBoundary key={location.pathname}>
+          <Outlet />
+        </ErrorBoundary>
       </main>
 
       {/* iOS-26 Liquid Glass Bottom Navigation */}
@@ -259,7 +262,7 @@ export default function Layout() {
 
       {/* Global Listen Together Invite Card (Floating) */}
       <AnimatePresence>
-        {globalInvite && location.pathname !== '/entertainment' && (
+        {globalInvite && location.pathname !== '/' && (
           <motion.div
             initial={{ opacity: 0, y: 50, scale: 0.95 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
@@ -289,7 +292,7 @@ export default function Layout() {
                         updated_at: new Date()
                       });
                       setGlobalInvite(null);
-                      navigate('/entertainment');
+                      navigate('/', { state: { openEntertainment: true, entertainmentTab: 'music' } });
                     } catch(e) {}
                   }}
                   className="flex-1 py-2.5 rounded-2xl text-white font-bold text-sm gradient-primary shadow-lg hover:opacity-90 active:scale-95 transition-all text-center"

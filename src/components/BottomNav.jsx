@@ -18,7 +18,7 @@
 
 import { useEffect, useRef, useCallback } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { Home, Utensils, Gamepad2, Map, Music } from 'lucide-react';
+import { Home, Utensils, Gamepad2, Map } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 const tabs = [
@@ -26,7 +26,6 @@ const tabs = [
   { path: '/food', icon: Utensils, label: 'Ăn gì?' },
   { path: '/games', icon: Gamepad2, label: 'Trò chơi' },
   { path: '/lovemap', icon: Map, label: 'Bản đồ' },
-  { path: '/entertainment', icon: Music, label: 'Giải trí' },
 ];
 
 export default function BottomNav() {

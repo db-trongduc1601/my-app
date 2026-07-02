@@ -236,7 +236,7 @@ export default function Love2048({ currentHighScores }) {
             spread: 60,
             origin: { y: 0.6 }
           });
-          setTimeout(() => setShakeScore(false), 200);
+          setTimeout(() => setShakeScore(false), 700);
         }
       }
 
@@ -301,9 +301,14 @@ export default function Love2048({ currentHighScores }) {
         <div className="flex flex-col items-start">
           <span className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider">Điểm số</span>
           <motion.span
-            animate={shakeScore ? { x: [0, -4, 4, -4, 4, -2, 2, 0] } : {}}
-            transition={{ duration: 0.2 }}
-            className="text-xl font-black text-primary text-glow inline-block"
+            key={score}
+            initial={{ scale: shakeScore ? 1.7 : 1.3, opacity: 0.5 }}
+            animate={{ scale: 1, opacity: 1 }}
+            transition={{ type: "spring", stiffness: 400, damping: 15 }}
+            className={cn(
+              "text-xl font-black inline-block",
+              shakeScore ? "text-yellow-300 text-glow" : "text-primary text-glow"
+            )}
           >
             {score}
           </motion.span>
@@ -313,7 +318,15 @@ export default function Love2048({ currentHighScores }) {
           <span className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider flex items-center gap-1">
             <Trophy size={10} className="text-yellow-400" /> Kỷ lục
           </span>
-          <span className="text-sm font-bold text-yellow-400">{highScore}</span>
+          <motion.span
+            key={highScore}
+            initial={{ scale: 1.4, opacity: 0.5 }}
+            animate={{ scale: 1, opacity: 1 }}
+            transition={{ type: "spring", stiffness: 400, damping: 15 }}
+            className="text-sm font-bold text-yellow-400 inline-block"
+          >
+            {highScore}
+          </motion.span>
         </div>
       </div>
 

@@ -67,16 +67,16 @@ export default function Food() {
       </div>
 
       {/* Sub-tabs */}
-      <div className="flex gap-2 liquid-glass rounded-2xl p-1">
+      <div className="flex gap-2 bg-white/5 border border-white/10 rounded-2xl p-1">
         <button onClick={() => setActiveTab('decider')}
           className={cn("flex-1 py-2 rounded-xl text-sm font-semibold transition-all",
-            activeTab === 'decider' ? "liquid-glass shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground")}
+            activeTab === 'decider' ? "bg-white/10 shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground")}
         >
           Gợi ý & Bộ lọc 🔍
         </button>
         <button onClick={() => setActiveTab('swipe')}
           className={cn("flex-1 py-2 rounded-xl text-sm font-semibold transition-all",
-            activeTab === 'swipe' ? "liquid-glass shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground")}
+            activeTab === 'swipe' ? "bg-white/10 shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground")}
         >
           Game quẹt món 🎯
         </button>
@@ -85,7 +85,7 @@ export default function Food() {
       <AnimatePresence>
         {showAdd && (
           <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
-            className="liquid-glass rim-light rounded-2xl p-4 space-y-3">
+            className="bg-white/5 border border-white/10 rounded-2xl p-4 space-y-3">
             <p className="text-sm font-semibold">Thêm món mới</p>
             <Input placeholder="Tên món *" value={form.ten_mon} onChange={e => setForm(f => ({...f, ten_mon: e.target.value}))} />
             <div className="grid grid-cols-2 gap-2">

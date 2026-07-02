@@ -231,7 +231,7 @@ export default function ChatInput({
       )}
 
       {/* Input Form */}
-      <div className="px-3 py-3 flex gap-2 flex-shrink-0 liquid-glass rim-light rounded-none items-center">
+      <div className="px-3 py-3 flex gap-2 flex-shrink-0 bg-white/5 border-t border-white/10 rounded-none items-center">
         <input 
           type="file" 
           accept="image/*,video/*" 
@@ -248,7 +248,7 @@ export default function ChatInput({
         </button>
 
         {isRecording ? (
-          <div className="flex-1 liquid-glass-sm rounded-xl px-3 py-2 text-sm text-destructive font-medium flex items-center justify-center animate-pulse">
+          <div className="flex-1 bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-sm text-destructive font-medium flex items-center justify-center animate-pulse">
             Đang ghi âm... Thả ra để gửi
           </div>
         ) : (
@@ -259,7 +259,7 @@ export default function ChatInput({
             onKeyDown={e => e.key === 'Enter' && !e.shiftKey && handleSend()}
             placeholder={placeholder}
             disabled={disabled}
-            className="flex-1 liquid-glass-sm rounded-xl px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-primary/50 placeholder:text-muted-foreground disabled:opacity-50 transition-all"
+            className="flex-1 bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-primary/50 placeholder:text-muted-foreground disabled:opacity-50 transition-all"
           />
         )}
         

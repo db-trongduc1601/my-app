@@ -215,7 +215,7 @@ export default function ChatWindow({ friend, currentUser, onBack }) {
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
-      <div className="flex items-center gap-3 px-4 py-3 liquid-glass rim-light flex-shrink-0">
+      <div className="flex items-center gap-3 px-4 py-3 bg-white/5 border-b border-white/10 flex-shrink-0">
         <button onClick={onBack} className="p-1 rounded-full hover:bg-secondary transition-colors">
           <ArrowLeft size={16} />
         </button>
