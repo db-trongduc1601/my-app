@@ -9,6 +9,7 @@ import { RefreshCw, ArrowRight } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { cn } from '@/lib/utils';
 import { motion } from 'framer-motion';
+import { useProfiles } from '../../hooks/useProfiles';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -59,7 +60,7 @@ export default function Caro() {
 
   // Accepted friends list
   const [friends, setFriends] = useState([]);   // list of emails
-  const [profiles, setProfiles] = useState({}); // email → profile data
+  const { profiles } = useProfiles();           // email → profile data
 
   // Selected PvP partner
   const [partnerEmail, setPartnerEmail] = useState('');
@@ -94,13 +95,6 @@ export default function Caro() {
         const unique = [...new Set(list.filter(Boolean))];
         setFriends(unique);
         if (unique.length > 0) setPartnerEmail(unique[0]);
-
-        // Load profiles
-        [myEmail, ...unique].forEach(email => {
-          onSnapshot(doc(db, 'user_profiles', email), snap => {
-            if (snap.exists()) setProfiles(prev => ({ ...prev, [email]: snap.data() }));
-          });
-        });
       } catch (e) {
         console.error('Caro: error loading friends', e);
       }

@@ -5,6 +5,7 @@ import { Gamepad2, Trophy, ArrowLeft } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import Love2048 from '../components/games/Love2048';
 import Caro from '../components/games/Caro';
+import { useProfiles } from '../hooks/useProfiles';
 
 // ─── Shared back-button wrapper with click/tap animation ─────────────────────
 function GameScreen({ onBack, children }) {
@@ -100,7 +101,7 @@ export default function Games() {
   const myEmail = currentUser?.email?.toLowerCase() || '';
 
   const [activeGame, setActiveGame] = useState(null);
-  const [profiles, setProfiles] = useState({});
+  const { profiles } = useProfiles();
   const [participantEmails, setParticipantEmails] = useState([]);
   const [loading, setLoading] = useState(true);
   const [love2048Scores, setLove2048Scores] = useState({});
@@ -127,18 +128,7 @@ export default function Games() {
     load();
   }, [myEmail]);
 
-  // 2. Watch profiles for all participants
-  useEffect(() => {
-    if (participantEmails.length === 0) return;
-    const unsubs = participantEmails.map(email =>
-      onSnapshot(doc(db, 'user_profiles', email), snap => {
-        if (snap.exists()) setProfiles(prev => ({ ...prev, [email]: snap.data() }));
-      })
-    );
-    return () => unsubs.forEach(u => u());
-  }, [participantEmails]);
-
-  // 3. Watch the Love 2048 high-score doc
+  // 2. Watch the Love 2048 high-score doc
   useEffect(() => {
     const unsub = onSnapshot(doc(db, 'game_high_scores', 'love_2048'), snap => {
       if (snap.exists()) setLove2048Scores(snap.data().scores || {});

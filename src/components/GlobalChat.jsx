@@ -5,12 +5,13 @@ import { X, MessageCircle } from 'lucide-react';
 import { motion } from 'framer-motion';
 import MessageBubble from '@/components/ui/MessageBubble';
 import ChatInput from '@/components/ui/ChatInput';
+import { useProfiles } from '../hooks/useProfiles';
 
 export default function GlobalChat({ open, onClose, currentUser }) {
   const [messages, setMessages] = useState([]);
   const [typingUsers, setTypingUsers] = useState([]);
   const [replyTo, setReplyTo] = useState(null);
-  const [profiles, setProfiles] = useState({});
+  const { profiles } = useProfiles();
   const [friendNicknames, setFriendNicknames] = useState({});
   const [tick, setTick] = useState(0);
   const bottomRef = useRef();
@@ -77,16 +78,6 @@ export default function GlobalChat({ open, onClose, currentUser }) {
       setTypingUsers(users);
     });
 
-    const unsubProfiles = onSnapshot(collection(db, 'user_profiles'), (snap) => {
-      const profs = {};
-      snap.forEach(doc => {
-        if (doc.data().email) {
-          profs[doc.data().email.toLowerCase()] = doc.data();
-        }
-      });
-      setProfiles(profs);
-    });
-
     const unsubFriends1 = onSnapshot(query(collection(db, 'friends'), where('owner_email', '==', currentUser?.email || '')), snap => {
       const f = {};
       snap.forEach(doc => {
@@ -110,7 +101,6 @@ export default function GlobalChat({ open, onClose, currentUser }) {
     return () => {
       unsubscribe();
       unsubTyping();
-      unsubProfiles();
       unsubFriends1();
       unsubFriends2();
     };

@@ -15,6 +15,7 @@ import {
   serverTimestamp 
 } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { useProfiles } from '../hooks/useProfiles';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   MapPin, 
@@ -106,7 +107,7 @@ export default function LoveMap() {
   const currentUser = auth.currentUser;
   const [map, setMap] = useState(null);
   const [memories, setMemories] = useState([]);
-  const [profiles, setProfiles] = useState({});
+  const { profiles } = useProfiles();
   const [selectedMemory, setSelectedMemory] = useState(null);
   
   // Realtime location states
@@ -148,19 +149,6 @@ export default function LoveMap() {
 
   // Polaroid fullscreen states
   const [zoomImage, setZoomImage] = useState(null);
-
-  // Load user profiles to get display names & avatars
-  useEffect(() => {
-    const unsub = onSnapshot(collection(db, 'user_profiles'), (snap) => {
-      const profs = {};
-      snap.forEach(d => {
-        const data = d.data();
-        if (data.email) profs[data.email.toLowerCase()] = data;
-      });
-      setProfiles(profs);
-    });
-    return () => unsub();
-  }, []);
 
   // Fetch memories in real time chronologically
   useEffect(() => {
