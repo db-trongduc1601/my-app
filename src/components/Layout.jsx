@@ -13,7 +13,6 @@ import { auth, db } from '../firebase';
 import { collection, query, where, onSnapshot, doc, updateDoc } from 'firebase/firestore';
 import { signOut, onAuthStateChanged } from 'firebase/auth';
 import { useToast } from "@/components/ui/use-toast";
-import { toast as sonnerToast } from 'sonner';
 import { registerFCMToken } from "@/hooks/useNotifications";
 import { useAuth } from '@/lib/AuthContext';
 

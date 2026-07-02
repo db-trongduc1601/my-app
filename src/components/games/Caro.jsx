@@ -77,7 +77,7 @@ export default function Caro() {
   const [dbGame, setDbGame] = useState(null);
   const [pvpTurn, setPvpTurn] = useState('');
   const [pvpPlayerSymbol, setPvpPlayerSymbol] = useState('');
-  const [pvpPartnerSymbol, setPvpPartnerSymbol] = useState('');
+
 
   const firedConfettiRef = React.useRef(false);
 
@@ -91,7 +91,6 @@ export default function Caro() {
     if (!myEmail || !partnerEmail) return;
     const mine = symbolForEmail(myEmail, partnerEmail);
     setPvpPlayerSymbol(mine);
-    setPvpPartnerSymbol(mine === 'X' ? 'O' : 'X');
   }, [myEmail, partnerEmail]);
 
   // ── 3. PvP real-time Firestore listener ────────────────────────────────────

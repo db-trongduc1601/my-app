@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { Music, Plus, Loader2, Link2, Upload, Trash2, Pause, Play, Users, X, Headphones } from 'lucide-react';
+import { Music, Plus, Loader2, Link2, Upload, Trash2, Pause, Play, Headphones } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { db, storage, auth } from '../../firebase';
 import { collection, doc, addDoc, deleteDoc, setDoc, onSnapshot, query, where, getDocs, serverTimestamp, updateDoc } from 'firebase/firestore';

@@ -7,7 +7,7 @@ import { toast } from 'sonner';
 import { X, Camera, Loader2 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 
 export default function ProfileEditorModal({ open, onClose, currentUser, onProfileUpdated }) {
   const [displayName, setDisplayName] = useState(currentUser?.displayName || '');

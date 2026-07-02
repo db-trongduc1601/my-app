@@ -99,10 +99,7 @@ export default function BottomNav() {
     };
   }, [handleMouseMove, handleTouchMove, handleOrientation]);
 
-  // ── iOS permission tap handler (removed)
-  const requestGyro = useCallback(() => {
-    // Permission prompt is removed to avoid blank screen behavior on iOS.
-  }, []);
+
 
   return (
     /**
