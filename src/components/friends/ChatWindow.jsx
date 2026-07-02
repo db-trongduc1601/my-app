@@ -5,6 +5,7 @@ import { collection, addDoc, query, onSnapshot, where, or, and, doc, setDoc, upd
 import { ArrowLeft } from 'lucide-react';
 import MessageBubble from '@/components/ui/MessageBubble';
 import ChatInput from '@/components/ui/ChatInput';
+import { getPresence } from '@/lib/presence';
 
 export default function ChatWindow({ friend, currentUser, onBack }) {
   const [messages, setMessages] = useState([]);
@@ -197,20 +198,8 @@ export default function ChatWindow({ friend, currentUser, onBack }) {
 
   const displayName = friendPresence?.display_name || friend.nickname || friend.friend_email.split('@')[0];
   
-  let isOnline = false;
-  let lastActiveText = "Chat riêng tư";
-  if (friendPresence?.last_active?.toMillis) {
-    const lastActiveMs = friendPresence.last_active.toMillis();
-    const diff = now - lastActiveMs;
-    if (diff < 45000) {
-      isOnline = true;
-    } else {
-      const mins = Math.floor(diff / 60000);
-      if (mins < 60) lastActiveText = `Hoạt động ${mins || 1} phút trước`;
-      else if (mins < 1440) lastActiveText = `Hoạt động ${Math.floor(mins/60)} giờ trước`;
-      else lastActiveText = `Hoạt động ${Math.floor(mins/1440)} ngày trước`;
-    }
-  }
+  const { isOnline, lastActiveText: lastActiveRaw } = getPresence(friendPresence, now);
+  const lastActiveText = lastActiveRaw || "Chat riêng tư";
 
   return (
     <div className="flex flex-col h-full">

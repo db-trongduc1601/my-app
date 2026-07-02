@@ -8,6 +8,7 @@ import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import ChatWindow from './ChatWindow';
 import { useAuth } from '@/lib/AuthContext';
+import { getPresence } from '@/lib/presence';
 
 function generateFriendCode(email) {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
@@ -456,21 +457,8 @@ export default function FriendsSidebar({ open, onClose, currentUser }) {
                   {friends.map(r => {
                     const f = getFriendDisplay(r);
                     const profile = allProfiles.find(p => p.email === f.email);
-                    
-                    let isOnline = false;
-                    let lastActiveText = "";
-                    if (profile?.last_active?.toMillis) {
-                      const lastActiveMs = profile.last_active.toMillis();
-                      const diff = now - lastActiveMs;
-                      if (diff < 45000) {
-                        isOnline = true;
-                      } else {
-                        const mins = Math.floor(diff / 60000);
-                        if (mins < 60) lastActiveText = `Hoạt động ${mins || 1} phút trước`;
-                        else if (mins < 1440) lastActiveText = `Hoạt động ${Math.floor(mins/60)} giờ trước`;
-                        else lastActiveText = `Hoạt động ${Math.floor(mins/1440)} ngày trước`;
-                      }
-                    }
+
+                    const { isOnline, lastActiveText } = getPresence(profile, now);
 
                     const unreadCount = unreadCountBySender?.[f.email?.toLowerCase()] || 0;
 

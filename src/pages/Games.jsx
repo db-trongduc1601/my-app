@@ -1,11 +1,12 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { db, auth } from '../firebase';
-import { doc, onSnapshot, collection, query, where, getDocs } from 'firebase/firestore';
+import { doc, onSnapshot } from 'firebase/firestore';
 import { Gamepad2, Trophy, ArrowLeft } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import Love2048 from '../components/games/Love2048';
 import Caro from '../components/games/Caro';
 import { useProfiles } from '../hooks/useProfiles';
+import { useFriends } from '../hooks/useFriends';
 
 // ─── Shared back-button wrapper with click/tap animation ─────────────────────
 function GameScreen({ onBack, children }) {
@@ -102,33 +103,16 @@ export default function Games() {
 
   const [activeGame, setActiveGame] = useState(null);
   const { profiles } = useProfiles();
-  const [participantEmails, setParticipantEmails] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const { friendEmails, loading } = useFriends();
   const [love2048Scores, setLove2048Scores] = useState({});
 
-  // 1. Load accepted friends list → build participant email set
-  useEffect(() => {
-    if (!myEmail) return;
-    const load = async () => {
-      try {
-        const q1 = query(collection(db, 'friends'), where('owner_email', '==', myEmail), where('status', '==', 'accepted'));
-        const q2 = query(collection(db, 'friends'), where('friend_email', '==', myEmail), where('status', '==', 'accepted'));
-        const [s1, s2] = await Promise.all([getDocs(q1), getDocs(q2)]);
-        const friendEmails = [];
-        s1.forEach(d => friendEmails.push(d.data().friend_email?.toLowerCase()));
-        s2.forEach(d => friendEmails.push(d.data().owner_email?.toLowerCase()));
-        const all = [...new Set([myEmail, ...friendEmails.filter(Boolean)])];
-        setParticipantEmails(all);
-      } catch (e) {
-        setParticipantEmails([myEmail]);
-      } finally {
-        setLoading(false);
-      }
-    };
-    load();
-  }, [myEmail]);
+  // Participant set = me + accepted friends (used to scope the scoreboard)
+  const participantEmails = useMemo(
+    () => [...new Set([myEmail, ...friendEmails].filter(Boolean))],
+    [myEmail, friendEmails]
+  );
 
-  // 2. Watch the Love 2048 high-score doc
+  // Watch the Love 2048 high-score doc
   useEffect(() => {
     const unsub = onSnapshot(doc(db, 'game_high_scores', 'love_2048'), snap => {
       if (snap.exists()) setLove2048Scores(snap.data().scores || {});

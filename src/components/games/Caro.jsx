@@ -1,8 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { db, auth } from '../../firebase';
 import {
-  doc, onSnapshot, setDoc, updateDoc, getDocs,
-  collection, query, where, serverTimestamp
+  doc, onSnapshot, setDoc, updateDoc, serverTimestamp
 } from 'firebase/firestore';
 import { toast } from 'sonner';
 import { RefreshCw, ArrowRight } from 'lucide-react';
@@ -10,6 +9,7 @@ import confetti from 'canvas-confetti';
 import { cn } from '@/lib/utils';
 import { motion } from 'framer-motion';
 import { useProfiles } from '../../hooks/useProfiles';
+import { useFriends } from '../../hooks/useFriends';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -58,9 +58,9 @@ export default function Caro() {
   const currentUser = auth.currentUser;
   const myEmail = currentUser?.email?.toLowerCase() || '';
 
-  // Accepted friends list
-  const [friends, setFriends] = useState([]);   // list of emails
-  const { profiles } = useProfiles();           // email → profile data
+  // Accepted friends list (realtime, both directions)
+  const { friendEmails: friends } = useFriends(); // list of emails
+  const { profiles } = useProfiles();             // email → profile data
 
   // Selected PvP partner
   const [partnerEmail, setPartnerEmail] = useState('');
@@ -81,26 +81,10 @@ export default function Caro() {
 
   const firedConfettiRef = React.useRef(false);
 
-  // ── 1. Load accepted friends + profiles ────────────────────────────────────
+  // ── 1. Default the PvP partner to the first friend once the list loads ─────
   useEffect(() => {
-    if (!myEmail) return;
-    const load = async () => {
-      try {
-        const q1 = query(collection(db, 'friends'), where('owner_email', '==', myEmail), where('status', '==', 'accepted'));
-        const q2 = query(collection(db, 'friends'), where('friend_email', '==', myEmail), where('status', '==', 'accepted'));
-        const [s1, s2] = await Promise.all([getDocs(q1), getDocs(q2)]);
-        const list = [];
-        s1.forEach(d => list.push(d.data().friend_email?.toLowerCase()));
-        s2.forEach(d => list.push(d.data().owner_email?.toLowerCase()));
-        const unique = [...new Set(list.filter(Boolean))];
-        setFriends(unique);
-        if (unique.length > 0) setPartnerEmail(unique[0]);
-      } catch (e) {
-        console.error('Caro: error loading friends', e);
-      }
-    };
-    load();
-  }, [myEmail]);
+    if (!partnerEmail && friends.length > 0) setPartnerEmail(friends[0]);
+  }, [friends, partnerEmail]);
 
   // ── 2. Derive player symbols whenever partner changes ──────────────────────
   useEffect(() => {
