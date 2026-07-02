@@ -12,7 +12,7 @@ import Home from '@/pages/Home';
 import { useState, useEffect, lazy, Suspense } from 'react';
 import { auth } from './firebase';
 import Login from './pages/Login';
-import { onAuthStateChanged, signOut } from 'firebase/auth';
+import { onAuthStateChanged } from 'firebase/auth';
 import { useNotifications } from '@/hooks/useNotifications';
 
 const Food = lazy(() => import('@/pages/Food'));
@@ -67,9 +67,7 @@ function App() {
     
     return () => unsubscribe();
   }, []);
-  const handleLogout = () => {
-    signOut(auth).catch((error) => console.log("Lỗi đăng xuất:", error));
-    };
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-[#FFF0F5]">
